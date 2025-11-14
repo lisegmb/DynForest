@@ -25,7 +25,7 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   }
 
   if (dynforest_obj$type == "surv" && is.null(IBS.max)) {
-    IBS.max <- max(dynforest_obj$data$Y$Y[, 1])
+    IBS.max <- madynforest_obj$data$Y$Y[, 1])
   }
 
   rf <- dynforest_obj
@@ -38,28 +38,22 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   ntree <- ncol(rf$rf)
   Inputs <- names(rf$Inputs[!sapply(rf$Inputs, is.null)])
 
-  if (is.null(ncores)) {
-    ncores <- parallel::detectCores() - 1
-  }
-
+  if (is.null(ncores)) ncores <- parallel::detectCores() - 1
   pbapply::pboptions(type = "none")
 
-  suppressWarnings({
-    cl <- parallel::makeCluster(ncores)
-    doParallel::registerDoParallel(cl)
-    parallel::clusterEvalQ(cl, {
-      library(pbapply)
-      library(doParallel)
-      library(doRNG)
-    })
+  # OOB error d'origine
+  cl <- parallel::makeCluster(ncores)
+  doParallel::registerDoParallel(cl)
+  parallel::clusterEvalQ(cl, {
+    library(pbapply)
+    library(doParallel)
+    library(doRNG)
   })
 
-  # OOB error d'origine
   tree_oob_err <- pbapply::pbsapply(1:ntree, function(i) {
     DynForest:::OOB.tree(rf$rf[, i], Longitudinal, Numeric, Factor, Y, timeVar,
                          IBS.min, IBS.max, cause = rf$cause)
   }, cl = cl)
-
   suppressWarnings(parallel::stopCluster(cl))
 
   Importance <- list(Longitudinal = NULL, Numeric = NULL, Factor = NULL)
@@ -76,24 +70,25 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
       set.seed(seed + p)
 
       if (!permute_trajectory) {
+        # Permutation simple : shuffle les valeurs du marqueur
         Longitudinal.perm <- Longitudinal
         Longitudinal.perm$X[, p] <- sample(na.omit(Longitudinal$X[, p]),
                                            size = nrow(Longitudinal$X),
                                            replace = TRUE)
       } else {
+        # Permutation par patient avec la nouvelle fonction
         df_long_perm <- data.frame()
-
         for (idA in all_ids) {
           idB_choices <- setdiff(all_ids, idA)
           if (length(idB_choices) == 0) next
           idB <- sample(idB_choices, 1)
 
           df_long_perm <- rbind(df_long_perm,
-                                permute_longitudinal_marker_patient(
+                                permute_longitudinal_group_patient(
                                   Longitudinal = Longitudinal,
                                   id_var = idVar,
                                   time_var = timeVar,
-                                  marker_index = p,
+                                  marker_indices = p,
                                   idA = idA,
                                   idB = idB,
                                   seed = seed + p + as.integer(idA)
@@ -109,7 +104,6 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
           )
           df_long_perm <- rbind(df_long_perm, df_rest)
         }
-
         df_long_perm <- df_long_perm[order(df_long_perm$id, df_long_perm$time), ]
 
         Longitudinal.perm <- list(
@@ -133,11 +127,9 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
 
   ### === NUMERIC VARIABLES === ###
   if ("Numeric" %in% Inputs) {
-    suppressWarnings({
-      cl <- parallel::makeCluster(ncores)
-      doParallel::registerDoParallel(cl)
-      parallel::clusterEvalQ(cl, library(doRNG))
-    })
+    cl <- parallel::makeCluster(ncores)
+    doParallel::registerDoParallel(cl)
+    parallel::clusterEvalQ(cl, library(doRNG))
 
     Importance$Numeric <- foreach::foreach(p = 1:ncol(Numeric$X),
                                            .combine = "c", .options.RNG = seed) %dorng% {
@@ -149,20 +141,16 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
                                                errs[k] <- DynForest:::OOB.tree(rf$rf[, k], Longitudinal, Numeric.perm, Factor, Y,
                                                                                timeVar, IBS.min, IBS.max, cause = rf$cause)
                                              }
-
                                              mean(errs - tree_oob_err)
                                            }
-
     suppressWarnings(parallel::stopCluster(cl))
   }
 
   ### === FACTOR VARIABLES === ###
   if ("Factor" %in% Inputs) {
-    suppressWarnings({
-      cl <- parallel::makeCluster(ncores)
-      doParallel::registerDoParallel(cl)
-      parallel::clusterEvalQ(cl, library(doRNG))
-    })
+    cl <- parallel::makeCluster(ncores)
+    doParallel::registerDoParallel(cl)
+    parallel::clusterEvalQ(cl, library(doRNG))
 
     Importance$Factor <- foreach::foreach(p = 1:ncol(Factor$X),
                                           .combine = "c", .options.RNG = seed) %dorng% {
@@ -174,10 +162,8 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
                                               errs[k] <- DynForest:::OOB.tree(rf$rf[, k], Longitudinal, Numeric, Factor.perm, Y,
                                                                               timeVar, IBS.min, IBS.max, cause = rf$cause)
                                             }
-
                                             mean(errs - tree_oob_err)
                                           }
-
     suppressWarnings(parallel::stopCluster(cl))
   }
 
