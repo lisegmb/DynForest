@@ -6,6 +6,7 @@
 \alias{plot.dynforestvimp}
 \alias{plot.dynforestgvimp}
 \alias{plot.dynforestpred}
+\alias{plot.dynforestpdp}
 \title{Plot function in dynforest}
 \usage{
 \method{plot}{dynforest}(x, tree = NULL, nodes = NULL, id = NULL, max_tree = NULL, ...)
@@ -17,37 +18,61 @@
 \method{plot}{dynforestgvimp}(x, PCT = FALSE, ...)
 
 \method{plot}{dynforestpred}(x, id = NULL, ...)
+
+\method{plot}{dynforestpdp}(
+  x,
+  x_label = NULL,
+  y_label = NULL,
+  title = "ICE and PDP Plot",
+  conf_band = FALSE,
+  alpha = 0.2,
+  type = c("both", "ice", "pdp"),
+  target_class = NULL,
+  ...
+)
 }
 \arguments{
-\item{x}{Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp} or \code{dynforestgvimp}, to respectively plot the CIF, the minimal depth, the variable importance or grouped variable importance.}
+\item{x}{Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively plot the CIF, the minimal depth, the variable importance, grouped variable importance, or ICE/PDP plots.}
 
-\item{tree}{For \code{dynforest} class, integer indicating the tree identifier}
+\item{tree}{For \code{dynforest} class, integer indicating the tree identifier.}
 
-\item{nodes}{For \code{dynforest} class, identifiers for the selected nodes}
+\item{nodes}{For \code{dynforest} class, identifiers for the selected nodes.}
 
-\item{id}{For \code{dynforest} and \code{dynforestpred} classes, identifier for a given subject}
+\item{id}{For \code{dynforest} and \code{dynforestpred} classes, identifier for a given subject.}
 
-\item{max_tree}{For \code{dynforest} class, integer indicating the number of tree to display while using \code{id} argument}
+\item{max_tree}{For \code{dynforest} class, integer indicating the number of trees to display when using \code{id} argument.}
 
-\item{...}{Optional parameters to be passed to the low level function}
+\item{...}{Optional parameters to be passed to the low level function.}
 
-\item{plot_level}{For \code{dynforestvardepth} class, compute the statistic at predictor (\code{plot_level}="predictor") or feature (\code{plot_level}="feature") level}
+\item{plot_level}{For \code{dynforestvardepth} class, compute the statistic at predictor (\code{plot_level} = "predictor") or feature (\code{plot_level} = "feature") level.}
 
-\item{PCT}{For \code{dynforestvimp} or \code{dynforestgvimp} class, display VIMP statistic in percentage. Default value is FALSE.}
+\item{PCT}{For \code{dynforestvimp} or \code{dynforestgvimp} classes, logical to display VIMP statistic in percentage. Default is FALSE.}
 
-\item{ordering}{For \code{dynforestvimp} class, order predictors according to VIMP value. Default value is TRUE.}
+\item{ordering}{For \code{dynforestvimp} class, logical to order predictors according to VIMP value. Default is TRUE.}
+
+\item{conf_band}{For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is FALSE.}
+
+\item{alpha}{For \code{dynforestpdp} class, numeric specifying the transparency level of the confidence band. Default is 0.2.}
+
+\item{type}{For \code{dynforestpdp} class, character indicating the plot type to display: "both" (default), "ice", or "pdp".}
 }
 \value{
-\code{plot()} function displays: \tabular{ll}{
+\code{plot()} function displays:
+\tabular{ll}{
 With \code{dynforestvardepth} \tab the minimal depth for each predictor/feature \cr
-\tab \cr
+\cr
 With \code{dynforestvimp} \tab the VIMP for each predictor \cr
-\tab \cr
+\cr
 With \code{dynforestgvimp} \tab the grouped-VIMP for each given group \cr
+\cr
+With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with optional confidence bands \cr
 }
 }
 \description{
-This function displays a plot of CIF for a given node and tree (for class \code{dynforest}), the most predictive variables with the minimal depth (for class \code{dynforestvardepth}), the variable importance (for class \code{dynforestvimp}) or the grouped variable importance (for class \code{dynforestgvimp}).
+This function displays a plot of CIF for a given node and tree (for class \code{dynforest}),
+the most predictive variables with the minimal depth (for class \code{dynforestvardepth}),
+the variable importance (for class \code{dynforestvimp}), grouped variable importance (for class \code{dynforestgvimp}),
+or ICE and PDP plots (for class \code{dynforestpdp}).
 }
 \examples{
 \donttest{

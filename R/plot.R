@@ -1,29 +1,39 @@
 #' Plot function in dynforest
 #'
-#' This function displays a plot of CIF for a given node and tree (for class \code{dynforest}), the most predictive variables with the minimal depth (for class \code{dynforestvardepth}), the variable importance (for class \code{dynforestvimp}) or the grouped variable importance (for class \code{dynforestgvimp}).
+#' This function displays a plot of CIF for a given node and tree (for class \code{dynforest}),
+#' the most predictive variables with the minimal depth (for class \code{dynforestvardepth}),
+#' the variable importance (for class \code{dynforestvimp}), grouped variable importance (for class \code{dynforestgvimp}),
+#' or ICE and PDP plots (for class \code{dynforestpdp}).
 #'
-#' @param x Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp} or \code{dynforestgvimp}, to respectively plot the CIF, the minimal depth, the variable importance or grouped variable importance.
-#' @param tree For \code{dynforest} class, integer indicating the tree identifier
-#' @param nodes For \code{dynforest} class, identifiers for the selected nodes
-#' @param id For \code{dynforest} and \code{dynforestpred} classes, identifier for a given subject
-#' @param max_tree For \code{dynforest} class, integer indicating the number of tree to display while using \code{id} argument
-#' @param plot_level For \code{dynforestvardepth} class, compute the statistic at predictor (\code{plot_level}="predictor") or feature (\code{plot_level}="feature") level
-#' @param PCT For \code{dynforestvimp} or \code{dynforestgvimp} class, display VIMP statistic in percentage. Default value is FALSE.
-#' @param ordering For \code{dynforestvimp} class, order predictors according to VIMP value. Default value is TRUE.
-#' @param ... Optional parameters to be passed to the low level function
+#' @param x Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively plot the CIF, the minimal depth, the variable importance, grouped variable importance, or ICE/PDP plots.
+#' @param tree For \code{dynforest} class, integer indicating the tree identifier.
+#' @param nodes For \code{dynforest} class, identifiers for the selected nodes.
+#' @param id For \code{dynforest} and \code{dynforestpred} classes, identifier for a given subject.
+#' @param max_tree For \code{dynforest} class, integer indicating the number of trees to display when using \code{id} argument.
+#' @param plot_level For \code{dynforestvardepth} class, compute the statistic at predictor (\code{plot_level} = "predictor") or feature (\code{plot_level} = "feature") level.
+#' @param PCT For \code{dynforestvimp} or \code{dynforestgvimp} classes, logical to display VIMP statistic in percentage. Default is FALSE.
+#' @param ordering For \code{dynforestvimp} class, logical to order predictors according to VIMP value. Default is TRUE.
+#' @param type For \code{dynforestpdp} class, character indicating the plot type to display: "both" (default), "ice", or "pdp".
+#' @param conf_band For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is FALSE.
+#' @param alpha For \code{dynforestpdp} class, numeric specifying the transparency level of the confidence band. Default is 0.2.
+#' @param ... Optional parameters to be passed to the low level function.
 #'
-#' @import ggplot2
+#' @import ggplot2 viridis dplyr tidyr magrittr
 #' @importFrom stringr str_order
 #'
 #' @seealso [dynforest()] [compute_ooberror()] [compute_vimp()] [compute_gvimp()] [compute_vardepth()]
 #'
-#' @return \code{plot()} function displays: \tabular{ll}{
+#' @return \code{plot()} function displays:
+#' \tabular{ll}{
 #'    With \code{dynforestvardepth} \tab the minimal depth for each predictor/feature \cr
-#'    \tab \cr
+#'    \cr
 #'    With \code{dynforestvimp} \tab the VIMP for each predictor \cr
-#'    \tab \cr
+#'    \cr
 #'    With \code{dynforestgvimp} \tab the grouped-VIMP for each given group \cr
+#'    \cr
+#'    With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with optional confidence bands \cr
 #' }
+
 #'
 #' @examples
 #' \donttest{
@@ -411,4 +421,264 @@ plot.dynforestpred <- function(x, id = NULL, ...){
 
   print(g)
 
+}
+
+#' @rdname plot.dynforest
+#' @method plot dynforestpdp
+#' @export
+plot.dynforestpdp <- function(x, x_label = NULL, y_label = NULL,
+                              title = "ICE and PDP Plot", conf_band = FALSE, alpha = 0.2,
+                              type = c("both", "ice", "pdp"),
+                              target_class = NULL, ...) {
+  type <- match.arg(type)
+  df <- x
+
+  # ---------------------------------------------------------------
+  #  Detect the model type from the data structure
+  #  - Survival     → columns: id, replicate_id, time, value (+1 parameter)
+  #  - Classification → presence of 'target_class'
+  #  - Regression    → numeric response
+  # ---------------------------------------------------------------
+  if (all(c("id","replicate_id","time","value") %in% colnames(df)) && ncol(df) == 5) {
+    model_type <- "surv"
+  } else if ("target_class" %in% colnames(df)) {
+    model_type <- "factor"
+  } else {
+    model_type <- "numeric"
+  }
+
+  # ---------------------------------------------------------------
+  #  Identify the variable of interest (the one varied in PDP/ICE)
+  # ---------------------------------------------------------------
+  exclude_cols <- c("id","replicate_id","value")
+  if (model_type=="surv") exclude_cols <- c(exclude_cols,"time")
+  if (model_type=="factor") exclude_cols <- c(exclude_cols,"target_class")
+
+  var_cols <- setdiff(colnames(df), exclude_cols)
+  color_var <- if(length(var_cols)>0) var_cols[1] else NULL
+
+  # ---------------------------------------------------------------
+  #  Determine the type of the variable of interest
+  #  numeric  → continuous predictor
+  #  factor   → categorical predictor
+  #  longitudinal → dynamic time-varying predictor
+  # ---------------------------------------------------------------
+  var_type <- if (!is.null(color_var)) class(df[[color_var]])[1] else NA
+  var_type <- ifelse(var_type %in% c("numeric","integer"), "numeric",
+                     ifelse(var_type %in% c("factor"), "factor", "longitudinal"))
+
+  # ---------------------------------------------------------------
+  #  Automatic axis labels depending on the model type
+  # ---------------------------------------------------------------
+  if (is.null(y_label)) {
+    y_label <- switch(model_type,
+                      surv = "Predicted risk (CIF)",
+                      factor = "Predicted probability",
+                      numeric = "Predicted value")
+  }
+  if (is.null(x_label)) {
+    if (model_type == "surv") {
+      x_label <- "Time"
+    } else {
+      x_label <- if (!is.null(color_var)) color_var else ""
+    }
+  }
+
+  # ---------------------------------------------------------------
+  #  Filter for a specific class (classification only)
+  # ---------------------------------------------------------------
+  if (model_type=="factor" && !is.null(target_class)) {
+    df <- df[df$target_class %in% target_class, , drop=FALSE]
+  }
+
+  p_ICE <- NULL
+  p_PDP <- NULL
+
+  # ===============================================================
+  #                        SURVIVAL MODELS
+  # ===============================================================
+  if(model_type=="surv") {
+
+    # Identify the variable used for color/facets
+    extra_cols <- setdiff(colnames(df), c("id","replicate_id","time","value"))
+    color_var_plot <- if ("transformation" %in% colnames(df)) "transformation"
+    else if(length(extra_cols)>0) extra_cols[1] else NULL
+
+    if(!is.null(color_var_plot))
+      df[[color_var_plot]] <- factor(df[[color_var_plot]], levels=sort(unique(df[[color_var_plot]])))
+
+    # -------------------------- ICE PLOT --------------------------
+    p_ICE <- ggplot(df, aes(x=time, y=value,
+                            group=interaction(id, .data[[color_var_plot]]),
+                            color=.data[[color_var_plot]])) +
+      geom_line(alpha=0.5, linewidth=0.7) +
+      labs(x=x_label, y=y_label, title=paste("ICE -", title), color=color_var_plot) +
+      theme_minimal()
+
+    # -------------------------- PDP PLOT --------------------------
+    df_mean <- df %>%
+      group_by(time, .data[[color_var_plot]]) %>%
+      summarise(mean_value = mean(value),
+                var_mc = stats::var(value)/n(),
+                n = n(),
+                .groups="drop") %>%
+      mutate(se_mc = sqrt(var_mc),
+             lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else 0,
+             upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else 0)
+
+    p_PDP <- ggplot(df_mean, aes(x=time, y=mean_value,
+                                 color=.data[[color_var_plot]],
+                                 fill=.data[[color_var_plot]])) +
+      geom_line(linewidth=1) +
+      geom_ribbon(aes(ymin=lower, ymax=upper), alpha=alpha, color=NA) +
+      labs(x=x_label, y=y_label, title=paste("PDP -", title),
+           color=color_var_plot, fill=color_var_plot) +
+      theme_minimal()
+  }
+
+  # ===============================================================
+  #                REGRESSION + CLASSIFICATION MODELS
+  # ===============================================================
+  else if(model_type %in% c("numeric","factor")) {
+
+    # x-axis variable
+    x_val <- if(var_type=="longitudinal") "transformation" else color_var
+    y_val <- "value"
+
+    # ---------------------------------------------------------------
+    #     Classification + numeric predictor
+    # ---------------------------------------------------------------
+    if(model_type=="factor" && var_type=="numeric") {
+
+      # -------------------------- ICE --------------------------
+      p_ICE <- ggplot(df, aes_string(
+        x = x_val, y = y_val,
+        group = "interaction(id, target_class)",
+        color = "target_class"
+      )) +
+        geom_line(alpha = 0.4, linewidth = 0.7) +
+        labs(x = x_label, y = y_label, title = paste("ICE -", title), color = "Class") +
+        theme_minimal()
+
+      # -------------------------- PDP --------------------------
+      df_mean <- df %>%
+        group_by(.data[[x_val]], target_class) %>%
+        summarise(mean_value = mean(value),
+                  var_mc = stats::var(value)/n(),
+                  n = n(),
+                  .groups="drop") %>%
+        mutate(se_mc = sqrt(var_mc),
+               lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA,
+               upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA)
+
+      p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value",
+                                          color="target_class", fill="target_class")) +
+        geom_line(linewidth=1) +
+        {if(conf_band) geom_ribbon(aes(ymin=lower, ymax=upper), alpha=alpha, color=NA) else NULL} +
+        labs(x=x_label, y=y_label, title=paste("PDP -", title),
+             color="Class", fill="Class") +
+        theme_minimal()
+    }
+
+    # ---------------------------------------------------------------
+    # Classification + categorical or longitudinal predictor
+    # ---------------------------------------------------------------
+    else if(model_type=="factor" && var_type %in% c("factor","longitudinal")) {
+
+      # -------------------------- ICE --------------------------
+      p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, fill=x_val)) +
+        geom_boxplot(alpha=0.5) +
+        labs(x=x_label, y=y_label, title=paste("ICE -", title), fill=x_val) +
+        theme_minimal() +
+        facet_wrap(~target_class,
+                   labeller = labeller(target_class = function(x) paste0("Class : ", x)))
+
+      # -------------------------- PDP --------------------------
+      df_mean <- df %>%
+        group_by(.data[[x_val]], target_class) %>%
+        summarise(mean_value = mean(value),
+                  sd_value = stats::sd(value),
+                  n = n(),
+                  .groups="drop") %>%
+        mutate(lower = mean_value - sd_value,
+               upper = mean_value + sd_value,
+               lower_band = if(conf_band) mean_value - stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA,
+               upper_band = if(conf_band) mean_value + stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA)
+
+      p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
+        geom_point(size=3) +
+        geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2) +
+        {if(conf_band) geom_errorbar(aes(ymin=lower_band, ymax=upper_band),
+                                     width=0.5, color="blue", alpha=0.3) else NULL} +
+        labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
+        theme_minimal() +
+        facet_wrap(~target_class,
+                   labeller = labeller(target_class = function(x) paste0("Class : ", x)))
+    }
+
+    # ---------------------------------------------------------------
+    # Regression models
+    # ---------------------------------------------------------------
+    else if(model_type=="numeric") {
+
+      # -------------------------- ICE --------------------------
+      if(var_type=="numeric") {
+        p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, group="id")) +
+          geom_line(alpha=0.5) +
+          labs(x=x_label, y=y_label, title=paste("ICE -", title)) +
+          theme_minimal()
+      } else {
+        p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, fill=x_val)) +
+          geom_boxplot(alpha=0.5) +
+          labs(x=x_label, y=y_label, title=paste("ICE -", title), fill=x_val) +
+          theme_minimal()
+      }
+
+      # -------------------------- PDP --------------------------
+      if(var_type=="numeric") {
+        df_mean <- df %>%
+          group_by(.data[[x_val]]) %>%
+          summarise(mean_value = mean(value),
+                    var_mc = stats::var(value)/n(),
+                    n = n(),
+                    .groups="drop") %>%
+          mutate(se_mc = sqrt(var_mc),
+                 lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA,
+                 upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA)
+
+        p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
+          geom_line(linewidth=1, color="blue") +
+          {if(conf_band) geom_ribbon(aes(ymin=lower, ymax=upper),
+                                     alpha=alpha, fill="blue", color=NA) else NULL} +
+          labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
+          theme_minimal()
+      } else {
+        df_mean <- df %>%
+          group_by(.data[[x_val]]) %>%
+          summarise(mean_value = mean(value),
+                    sd_value = stats::sd(value),
+                    n = n(),
+                    .groups="drop") %>%
+          mutate(lower = mean_value - sd_value,
+                 upper = mean_value + sd_value,
+                 lower_band = if(conf_band) mean_value - stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA,
+                 upper_band = if(conf_band) mean_value + stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA)
+
+        p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
+          geom_point(size=3) +
+          geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2) +
+          {if(conf_band) geom_errorbar(aes(ymin=lower_band, ymax=upper_band),
+                                       width=0.5, color="blue", alpha=0.3) else NULL} +
+          labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
+          theme_minimal()
+      }
+    }
+  }
+
+  # ---------------------------------------------------------------
+  #  Final output depending on selected type
+  # ---------------------------------------------------------------
+  if(type=="ice"){ print(p_ICE); return(invisible(p_ICE)) }
+  else if(type=="pdp"){ print(p_PDP); return(invisible(p_PDP)) }
+  else { print(p_ICE); print(p_PDP); return(invisible(list(ICE=p_ICE, PDP=p_PDP))) }
 }

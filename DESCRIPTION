@@ -6,7 +6,7 @@ Authors@R:
     person("Anthony", "Devaux", email = "anthony.devauxbarault@gmail.com", 
     role = c("aut", "cre"), comment = c(ORCID = "0000-0002-8862-4218")),
     person("Robin", "Genuer", email = "robin.genuer@u-bordeaux.fr", 
-    role = c("aut"), comment = c(ORCID = "0000-0002-0981-3943")),
+    role = c("aut"), comment = c(ORCID = "0000-002-0981-3943")),
     person("Cécile", "Proust-Lima", email = "cecile.proust-lima@u-bordeaux.fr", 
     role = c("aut"), comment = c(ORCID = "0000-0002-9884-955X")),
     person("Louis", "Capitaine",
@@ -18,14 +18,34 @@ Description: Based on random forest principle, 'DynForest' is able to include
     methodology is fully described for a survival outcome in: 
     Devaux, Helmer, Genuer & Proust-Lima (2023) 
     <doi: 10.1177/09622802231206477>.
-Imports: DescTools, cli, cmprsk, doParallel, doRNG, foreach, ggplot2, lcmm, methods, 
-    pbapply, pec, prodlim, stringr, survival, zoo
+Imports: 
+    DescTools, 
+    cli, 
+    cmprsk, 
+    doParallel, 
+    doRNG, 
+    foreach, 
+    ggplot2, 
+    lcmm, 
+    methods, 
+    pbapply, 
+    pec, 
+    prodlim, 
+    stringr, 
+    survival, 
+    zoo, 
+    dplyr, 
+    tidyr, 
+    magrittr,
+    viridis,
+    tidyselect,
+    rlang
 Depends: R (>= 4.4.0)
 License: LGPL (>= 3)
 LazyData: true
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 URL: https://github.com/anthonydevaux/DynForest
 BugReports: https://github.com/anthonydevaux/DynForest/issues
 Suggests: 
