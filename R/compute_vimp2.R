@@ -25,7 +25,7 @@ compute_vimp2 <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   }
 
   if (dynforest_obj$type == "surv" && is.null(IBS.max)) {
-    IBS.max <- madynforest_obj$data$Y$Y[, 1])
+    IBS.max <- madynforest_obj$data$Y$Y[, 1]
   }
 
   rf <- dynforest_obj
