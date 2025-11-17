@@ -1,7 +1,10 @@
 #' Compute the grouped importance of variables (gVIMP) statistic
 #'
+#' This function computes the importance of predefined variable groups for a dynforest object.
+#' Longitudinal markers can be permuted either by shuffling values or swapping trajectories between subjects.
+#'
 #' @inheritParams compute_vimp
-#' @param group A list of groups with the name of the predictors assigned in each group
+#' @param group A named list of variable groups. Each element contains variable names for that group.
 #'
 #' @importFrom methods is
 #' @import doRNG
@@ -16,6 +19,8 @@
 #'    \code{tree_oob_err} \tab A numeric vector containing the OOB error for each tree needed to compute the VIMP statistic \cr
 #'    \tab \cr
 #'    \code{IBS.range} \tab A vector containing the IBS min and max \cr
+#'    \tab \cr
+#'    \code{permute_trajectory} \tab Logical flag indicating whether longitudinal trajectories were permuted as whole trajectories or shuffled independently \cr
 #' }
 #'
 #' @export
@@ -25,75 +30,48 @@
 #' @examples
 #' \donttest{
 #' data(pbc2)
-#'
-#' # Get Gaussian distribution for longitudinal predictors
 #' pbc2$serBilir <- log(pbc2$serBilir)
 #' pbc2$SGOT <- log(pbc2$SGOT)
 #' pbc2$albumin <- log(pbc2$albumin)
 #' pbc2$alkaline <- log(pbc2$alkaline)
-#'
-#' # Sample 100 subjects
 #' set.seed(1234)
 #' id <- unique(pbc2$id)
 #' id_sample <- sample(id, 100)
-#' id_row <- which(pbc2$id%in%id_sample)
-#'
-#' pbc2_train <- pbc2[id_row,]
-#'
-#  Build longitudinal data
-#' timeData_train <- pbc2_train[,c("id","time",
-#'                                 "serBilir","SGOT",
-#'                                 "albumin","alkaline")]
-#'
-#' # Create object with longitudinal association for each predictor
-#' timeVarModel <- list(serBilir = list(fixed = serBilir ~ time,
-#'                                      random = ~ time),
-#'                      SGOT = list(fixed = SGOT ~ time + I(time^2),
-#'                                  random = ~ time + I(time^2)),
-#'                      albumin = list(fixed = albumin ~ time,
-#'                                     random = ~ time),
-#'                      alkaline = list(fixed = alkaline ~ time,
-#'                                      random = ~ time))
-#'
-#' # Build fixed data
-#' fixedData_train <- unique(pbc2_train[,c("id","age","drug","sex")])
-#'
-#' # Build outcome data
-#' Y <- list(type = "surv",
-#'           Y = unique(pbc2_train[,c("id","years","event")]))
-#'
-#' # Run dynforest function
+#' id_row <- which(pbc2$id %in% id_sample)
+#' pbc2_train <- pbc2[id_row, ]
+#' timeData_train <- pbc2_train[, c("id","time","serBilir","SGOT","albumin","alkaline")]
+#' timeVarModel <- list(
+#'   serBilir = list(fixed = serBilir ~ time, random = ~ time),
+#'   SGOT = list(fixed = SGOT ~ time + I(time^2), random = ~ time + I(time^2)),
+#'   albumin = list(fixed = albumin ~ time, random = ~ time),
+#'   alkaline = list(fixed = alkaline ~ time, random = ~ time)
+#' )
+#' fixedData_train <- unique(pbc2_train[, c("id","age","drug","sex")])
+#' Y <- list(type = "surv", Y = unique(pbc2_train[, c("id","years","event")]))
 #' res_dyn <- dynforest(timeData = timeData_train, fixedData = fixedData_train,
 #'                      timeVar = "time", idVar = "id",
 #'                      timeVarModel = timeVarModel, Y = Y,
 #'                      ntree = 50, nodesize = 5, minsplit = 5,
 #'                      cause = 2, ncores = 2, seed = 1234)
-#'
-#' # Compute gVIMP statistic
-#' res_dyn_gVIMP <- compute_gvimp(dynforest_obj = res_dyn,
-#'                                group = list(group1 = c("serBilir","SGOT"),
-#'                                             group2 = c("albumin","alkaline")),
-#'                                ncores = 2, seed = 1234)
+#' res_dyn_gVIMP <- compute_gvimp(
+#'   dynforest_obj = res_dyn,
+#'   group = list(group1 = c("serBilir","SGOT"),
+#'                group2 = c("albumin","alkaline")),
+#'   ncores = 2, seed = 1234, permute_trajectory = TRUE
+#' )
 #' }
+
 compute_gvimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
-                          group = NULL, ncores = NULL, seed = 1234){
+                          group = NULL, ncores = NULL, seed = 1234,
+                          permute_trajectory = FALSE) {
 
-  if (!methods::is(dynforest_obj,"dynforest")){
-    cli_abort(c(
-      "{.var dynforest_obj} must be a dynforest object",
-      "x" = "You've supplied a {.cls {class(dynforest_obj)}} object"
-    ))
+  if (!methods::is(dynforest_obj, "dynforest")) {
+    cli::cli_abort("{.var dynforest_obj} must be a dynforest object")
   }
-
-  if (dynforest_obj$type=="surv"){
-    if (is.null(IBS.max)){
-      IBS.max <- max(dynforest_obj$data$Y$Y[,1])
-    }
+  if (dynforest_obj$type == "surv" && is.null(IBS.max)) {
+    IBS.max <- max(dynforest_obj$data$Y$Y[,1])
   }
-
-  if (is.null(group)){
-    stop("'group' argument cannot be NULL! Please define groups to compute the gVIMP statistic!")
-  }
+  if (is.null(group)) stop("'group' argument cannot be NULL!")
 
   rf <- dynforest_obj
   Longitudinal <- rf$data$Longitudinal
@@ -101,131 +79,101 @@ compute_gvimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   Factor <- rf$data$Factor
   Y <- rf$data$Y
   timeVar <- rf$timeVar
+  idVar <- rf$idVar
   ntree <- ncol(rf$rf)
-  Inputs <- names(rf$Inputs[!sapply(rf$Inputs,is.null)])
+  Inputs <- names(rf$Inputs[!sapply(rf$Inputs, is.null)])
+  all_ids <- unique(Longitudinal$id)
 
-  # ncores
-  if (is.null(ncores)==TRUE){
-    ncores <- parallel::detectCores()-1
-  }
+  if (is.null(ncores)) ncores <- parallel::detectCores() - 1
+  pbapply::pboptions(type = "none")
 
-  ##############################
-
-  pbapply::pboptions(type="none")
-
+  # Compute baseline OOB error
   cl <- parallel::makeCluster(ncores)
   doParallel::registerDoParallel(cl)
-
-  pck <- .packages()
-  dir0 <- find.package()
-  dir <- sapply(1:length(pck),function(k){gsub(pck[k],"",dir0[k])})
-  parallel::clusterExport(cl,list("pck","dir"),envir=environment())
-  parallel::clusterEvalQ(cl,sapply(1:length(pck),function(k){require(pck[k],lib.loc=dir[k],character.only=TRUE)}))
-
-  tree_oob_err <- pbsapply(1:ntree,
-                           FUN=function(i){OOB.tree(rf$rf[,i], Longitudinal = Longitudinal, Numeric = Numeric, Factor = Factor, Y = Y,
-                                                    timeVar = timeVar, IBS.min = IBS.min, IBS.max = IBS.max, cause = rf$cause)},cl=cl)
-
+  parallel::clusterEvalQ(cl, { library(pbapply); library(doParallel) })
+  tree_oob_err <- pbapply::pbsapply(1:ntree, function(i) {
+    DynForest:::OOB.tree(rf$rf[, i], Longitudinal, Numeric, Factor, Y,
+                         timeVar, IBS.min, IBS.max, cause = rf$cause)
+  }, cl = cl)
   parallel::stopCluster(cl)
 
-  # tree_oob_err <- rep(NA, ntree)
-  # for (i in 1:ntree){
-  #   tree_oob_err[i] = OOB.tree(rf$rf[,i], Longitudinal=Longitudinal,Numeric=Numeric,Factor = Factor, Y=Y,
-  #                        timeVar = timeVar, IBS.min = IBS.min, IBS.max = IBS.max, cause = rf$cause)
-  # }
-
-  #####################
-
-  gVIMP <- vector("numeric", length(group))
+  gVIMP <- numeric(length(group))
   names(gVIMP) <- names(group)
+  set.seed(seed)
 
-  set.seed(seed) # set seed for permutation
+  # Loop over groups
+  for (g in seq_along(group)) {
+    g_vars <- group[[g]]
 
-  for (g in 1:length(group)){
+    Longitudinal_perm <- Longitudinal
+    Numeric_perm <- Numeric
+    Factor_perm <- Factor
 
-    g_group <- group[[g]]
-
-    Factor.perm <- Numeric.perm <- Longitudinal.perm <- NULL
-
-    for (Input in Inputs){ # Duplicate Inputs for permutation
-
-      assign(paste0(Input,".perm"), get(Input))
-
+    # Permute longitudinal markers
+    if ("Longitudinal" %in% Inputs) {
+      markers_in_group <- g_vars[g_vars %in% colnames(Longitudinal$X)]
+      if (permute_trajectory) {
+        df_long_perm <- data.frame()
+        for (idA in all_ids) {
+          idB_choices <- setdiff(all_ids, idA)
+          if (length(idB_choices) == 0) next
+          idB <- sample(idB_choices, 1)
+          df_long_perm <- rbind(df_long_perm,
+                                permute_longitudinal_group(Longitudinal, idVar, timeVar,
+                                                           which(colnames(Longitudinal$X) %in% markers_in_group),
+                                                           idA, idB, seed))
+        }
+        df_long_perm <- df_long_perm[order(df_long_perm$id, df_long_perm$time), ]
+        Longitudinal_perm <- list(
+          type = "Longitudinal",
+          X = df_long_perm[, colnames(Longitudinal$X), drop = FALSE],
+          id = df_long_perm$id,
+          time = df_long_perm$time,
+          model = Longitudinal$model
+        )
+      } else {
+        for (marker in markers_in_group) {
+          Longitudinal_perm$X[, marker] <- sample(Longitudinal_perm$X[, marker])
+        }
+      }
     }
 
-    for (p in 1:length(g_group)){
+    # Permute numeric/factor variables consistently
+    id_mapping <- setNames(sample(all_ids, length(all_ids), replace = FALSE), all_ids)
 
-      var_group <- g_group[p]
-
-      # Factor permutation
-      if (any(Inputs=="Factor")){
-        if (any(var_group%in%colnames(Factor$X))){
-          Factor.perm$X[, var_group] <- sample(Factor$X[, var_group])
-        }
+    if ("Numeric" %in% Inputs) {
+      vars_numeric <- g_vars[g_vars %in% colnames(Numeric$X)]
+      for (var in vars_numeric) {
+        Numeric_perm$X[, var] <- Numeric$X[match(id_mapping[as.character(Longitudinal$id)], Longitudinal$id), var]
       }
-
-      # Numeric permutation
-      if (any(Inputs=="Numeric")){
-        if (any(var_group%in%colnames(Numeric$X))){
-          Numeric.perm$X[, var_group] <- sample(Numeric$X[, var_group])
-        }
-      }
-
-      # Longitudinal permutation
-      if (any(Inputs=="Longitudinal")){
-        if (any(var_group%in%colnames(Longitudinal$X))){
-          Longitudinal.perm$X[, var_group] <- sample(x = na.omit(Longitudinal$X[, var_group]),
-                                                     size = length(Longitudinal$X[, var_group]),
-                                                     replace = TRUE) # avoid NA issue with permut
-        }
-      }
-
     }
-
-    k <- NULL
+    if ("Factor" %in% Inputs) {
+      vars_factor <- g_vars[g_vars %in% colnames(Factor$X)]
+      for (var in vars_factor) {
+        Factor_perm$X[, var] <- Factor$X[match(id_mapping[as.character(Longitudinal$id)], Longitudinal$id), var]
+      }
+    }
 
     cl <- parallel::makeCluster(ncores)
     doParallel::registerDoParallel(cl)
+    parallel::clusterEvalQ(cl, library(doRNG))
 
-    pck <- .packages()
-    dir0 <- find.package()
-    dir <- sapply(1:length(pck),function(k){gsub(pck[k],"",dir0[k])})
-    parallel::clusterExport(cl,list("pck","dir"),envir=environment())
-    parallel::clusterEvalQ(cl,sapply(1:length(pck),function(k){require(pck[k],lib.loc=dir[k],character.only=TRUE)}))
-
-    res <- foreach::foreach(k=1:ntree,
-                            .combine = "c", .options.RNG = seed) %dorng% {
-
-      # res <- vector("numeric", ntree)
-      # for (k in 1:ntree){
-
-      return(OOB.tree(rf$rf[,k], Longitudinal = Longitudinal.perm,
-                      Numeric = Numeric.perm,
-                      Factor = Factor.perm, Y,
-                      timeVar = timeVar,
-                      IBS.min = IBS.min, IBS.max = IBS.max, cause = rf$cause))
-
-      # res[k] <- OOB.tree(rf$rf[,k], Longitudinal = Longitudinal.perm,
-      #                    Numeric = Numeric.perm,
-      #                    Factor = Factor.perm, Y,
-      #                    timeVar = timeVar,
-      #                    IBS.min = IBS.min, IBS.max = IBS.max, cause = rf$cause)
-
+    errs <- foreach::foreach(k = 1:ntree, .combine = "c", .options.RNG = seed) %dorng% {
+      DynForest:::OOB.tree(rf$rf[, k], Longitudinal_perm, Numeric_perm, Factor_perm,
+                           Y, timeVar, IBS.min, IBS.max, cause = rf$cause)
     }
-
     parallel::stopCluster(cl)
 
-    gVIMP[g] <- mean(res - tree_oob_err)
-
+    gVIMP[g] <- mean(errs - tree_oob_err)
   }
 
-  out <- list(Inputs = dynforest_obj$Inputs,
-              group = group,
-              gVIMP = gVIMP,
-              tree_oob_err = tree_oob_err,
-              IBS.range = c(IBS.min, IBS.max))
-
-  class(out) <- c("dynforestgvimp")
-
+  out <- list(
+    Inputs = dynforest_obj$Inputs,
+    group = group,
+    gVIMP = gVIMP,
+    tree_oob_err = tree_oob_err,
+    IBS.range = c(IBS.min, IBS.max)
+  )
+  class(out) <- "dynforestgvimp"
   return(out)
 }

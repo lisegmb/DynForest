@@ -33,18 +33,23 @@ The package includes two main functions: `dynforest()` and `predict()` for the l
 | *Assessment function* |  |
 | `compute_ooberror()` | Function that computes the Out-Of-Bag error to be minimized to tune the random forest |
 | *Exploring functions* |  |
-| `compute_vimp()` | Function that computes the importance of variables |
-| `compute_gvimp()` | Function that computes the importance of a group of variables |
-| `compute_vardepth()` | Function that extracts information about the tree building process |
+|-----------------------|--|
+| `compute_vimp()`      | Function that computes the importance of variables |
+| `compute_gvimp()`     | Function that computes the importance of a group of variables |
+| `compute_vardepth()`  | Function that extracts information about the tree building process |
+| `compute_ice_pdp()`   | Function that computes Individual Conditional Expectation (ICE) and Partial Dependence Plots (PDP) |
+
+
 | *plot() functions for S3 class:* | |
-| `dynforest` | Plot the estimated CIF for given tree nodes or subjects |
-| `dynforestpred` | Plot the predicted CIF for the cause of interest for given subjects |
-| `dynforestvimp` | Plot the importance of variables by value or percentage |
-| `dynforestgvimp` | Plot the importance of a group of variables by value or percentage |
-| `dynforestvardepth` | Plot the minimal depth by predictors or features |
-| *Other functions* | |
-| `summary()` | Function for class S3 `dynforest` or `dynforestoob` displaying information about the type of random forest, predictors included, parameters used, Out-Of-Bag error (only for `dynforestoob` class) and brief summaries about the leaves |
-| `print()` | Function to print object of class `dynforest`, `dynforestoob`, `dynforestvimp`, `dynforestgvimp`, `dynforestvardepth` and `dynforestpred` |
+|---------------------------------|--|
+| `dynforest`                     | Plot the estimated CIF for given tree nodes or subjects |
+| `dynforestpred`                 | Plot the predicted CIF for the cause of interest for given subjects |
+| `dynforestvimp`                 | Plot the importance of variables by value or percentage |
+| `dynforestgvimp`                | Plot the importance of a group of variables by value or percentage |
+| `dynforestvardepth`             | Plot the minimal depth by predictors or features |
+| `dynforestpdp`                  | Plot Partial Dependence and Individual Conditional Expectation curves |
+
+| `print()` | Function to print object of class `dynforest`, `dynforestoob`, `dynforestvimp`, `dynforestgvimp`, `dynforestvardepth`, `dynforestpred` and `dynforestpdp` |
 | `get_tree()` | Function that extracts the tree structure for a given tree |
 | `get_treenode()` | Function that extracts the terminal node identifiers for a given tree |
 
