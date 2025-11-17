@@ -24,7 +24,6 @@
 #' @param timeVar Optional character; name of the time variable. If \code{NULL}, attempts to use \code{model$timeVar} or defaults to \code{"time"}.
 #' @param t0 Optional numeric. Landmark time for dynamic prediction. If \code{NULL}, predictions use all available information from time 0.
 #' @param ncores Integer. Number of cores to use for parallel computation (if implemented). Defaults to 1.
-#' @param ... Additional arguments passed to the underlying prediction routine or plotting functions.
 #'
 #' @return A \code{dynforestpdp} object (a \code{data.frame}) with at least the following columns:
 #' \describe{

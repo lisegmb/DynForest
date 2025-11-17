@@ -48,8 +48,6 @@ For longitudinal predictors: a \strong{named list of functions} to apply to each
 \item{grid_size}{Integer. Number of grid points to generate when \code{values} is a single integer.}
 
 \item{ncores}{Integer. Number of cores to use for parallel computation (if implemented). Defaults to 1.}
-
-\item{...}{Additional arguments passed to the underlying prediction routine or plotting functions.}
 }
 \value{
 A \code{dynforestpdp} object (a \code{data.frame}) with at least the following columns:

@@ -2,7 +2,7 @@
 % Please edit documentation in R/compute_gvimp2.R
 \name{compute_gvimp2}
 \alias{compute_gvimp2}
-\title{Compute grouped variable importance (gVIMP) for dynforest models}
+\title{Compute the grouped importance of variables (gVIMP) statistic}
 \usage{
 compute_gvimp2(
   dynforest_obj,
@@ -15,24 +15,91 @@ compute_gvimp2(
 )
 }
 \arguments{
-\item{dynforest_obj}{A dynforest object from \code{dynforest()}.}
+\item{dynforest_obj}{dynforest_obj \code{dynforest} object.}
 
-\item{IBS.min}{Minimal time for Integrated Brier Score computation (survival only). Default is 0.}
+\item{IBS.min}{(Only with survival outcome) Minimal time to compute the Integrated Brier Score. Default value is set to 0.}
 
-\item{IBS.max}{Maximal time for Integrated Brier Score computation (survival only). Default is the maximum observed time.}
+\item{IBS.max}{(Only with survival outcome) Maximal time to compute the Integrated Brier Score. Default value is set to the maximal time-to-event found.}
 
 \item{group}{A named list of variable groups. Each element contains variable names for that group.}
 
-\item{ncores}{Number of cores for parallel computation. Default is available cores minus 1.}
+\item{ncores}{Number of cores used to grow trees in parallel. Default value is the number of cores of the computer minus 1.}
 
-\item{seed}{Random seed for reproducibility.}
+\item{seed}{Seed to replicate results. Default is 1234.}
 
-\item{permute_trajectory}{If TRUE, longitudinal markers are permuted by swapping trajectories instead of shuffling values. Default is FALSE.}
+\item{permute_trajectory}{Logical. If TRUE, longitudinal markers are permuted by swapping trajectories between subjects; if FALSE, markers are shuffled independently. Default is FALSE.}
 }
 \value{
-A list containing Inputs, groups, gVIMP values, tree OOB errors, and IBS range.
+\code{compute_gvimp2()} function returns a list with the following elements:\tabular{ll}{
+\code{Inputs} \tab A list of 3 elements: \code{Longitudinal}, \code{Numeric} and \code{Factor}. Each element contains the names of the predictors \cr
+\tab \cr
+\code{group} \tab A list of each group defined in \code{group} argument \cr
+\tab \cr
+\code{gVIMP} \tab A numeric vector containing the gVIMP for each group defined in \code{group} argument \cr
+\tab \cr
+\code{tree_oob_err} \tab A numeric vector containing the OOB error for each tree needed to compute the VIMP statistic \cr
+\tab \cr
+\code{IBS.range} \tab A vector containing the IBS min and max \cr
+\tab \cr
+\code{permute_trajectory} \tab Logical flag indicating whether longitudinal trajectories were permuted as whole trajectories or shuffled independently \cr
+}
 }
 \description{
-This function computes the importance of predefined variable groups.
+This function computes the importance of predefined variable groups for a dynforest object.
 Longitudinal markers can be permuted either by shuffling values or swapping trajectories between subjects.
+}
+\examples{
+\donttest{
+data(pbc2)
+
+# Transform longitudinal predictors
+pbc2$serBilir <- log(pbc2$serBilir)
+pbc2$SGOT <- log(pbc2$SGOT)
+pbc2$albumin <- log(pbc2$albumin)
+pbc2$alkaline <- log(pbc2$alkaline)
+
+# Sample 100 subjects
+set.seed(1234)
+id <- unique(pbc2$id)
+id_sample <- sample(id, 100)
+id_row <- which(pbc2$id \%in\% id_sample)
+pbc2_train <- pbc2[id_row, ]
+
+# Build longitudinal data
+timeData_train <- pbc2_train[, c("id","time",
+                                 "serBilir","SGOT",
+                                 "albumin","alkaline")]
+
+# Longitudinal models
+timeVarModel <- list(
+  serBilir = list(fixed = serBilir ~ time, random = ~ time),
+  SGOT = list(fixed = SGOT ~ time + I(time^2), random = ~ time + I(time^2)),
+  albumin = list(fixed = albumin ~ time, random = ~ time),
+  alkaline = list(fixed = alkaline ~ time, random = ~ time)
+)
+
+# Fixed data
+fixedData_train <- unique(pbc2_train[, c("id","age","drug","sex")])
+
+# Outcome
+Y <- list(type = "surv", Y = unique(pbc2_train[, c("id","years","event")]))
+
+# Run dynforest
+res_dyn <- dynforest(timeData = timeData_train, fixedData = fixedData_train,
+                     timeVar = "time", idVar = "id",
+                     timeVarModel = timeVarModel, Y = Y,
+                     ntree = 50, nodesize = 5, minsplit = 5,
+                     cause = 2, ncores = 2, seed = 1234)
+
+# Compute gVIMP statistic with trajectory permutation
+res_dyn_gVIMP2 <- compute_gvimp2(
+  dynforest_obj = res_dyn,
+  group = list(group1 = c("serBilir","SGOT"),
+               group2 = c("albumin","alkaline")),
+  ncores = 2, seed = 1234, permute_trajectory = TRUE
+)
+}
+}
+\seealso{
+\code{\link[=dynforest]{dynforest()}}
 }
