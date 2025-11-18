@@ -235,6 +235,8 @@ The first year after the landmark time (at 4 years), we observe a rapid increase
 ### Variable importance
 
 The main objective of the random forest is to predict an outcome. But usually, we are interested in identifying which predictors are the most predictive. The VIMP statistic [@ishwaran_random_2008] can be computed using `compute_vimp()` function. This function returns the VIMP statistic for each predictor with `$Importance` element. These results can also be displayed using `plot()` function, either in absolute value by default or in percentage with `PCT` argument set to `TRUE`.
+Note that for both `compute_vimp()` and `compute_gvimp()`, the argument `permute_trajectory = TRUE` allows permuting entire longitudinal trajectories between subjects. By default (`FALSE`), the values of each marker are permuted observation by observation. This option is useful when the goal is to preserve the temporal correlation structure within each trajectory while assessing variable importance.
+
 
 ```{r, eval = FALSE, echo = TRUE}
 res_dyn_VIMP <- compute_vimp(dynforest_obj = res_dyn, seed = 123)
@@ -305,6 +307,33 @@ knitr::include_graphics("Figures/DynForestR_surv_mindepth.png")
 
 
 In our example, we ran a random forest with mtry hyperparameter set to its maximum (i.e., `mtry` = 7) and we computed the minimal depth on this random forest. We observe that `serBilir`, `albumin` and `age` have the lowest minimal depth, indicating these predictors are used to split the subjects at early stages in 200 out of 200 trees, i.e., 100\% for `serBilir`, `age` and in 199 out of 200 for `albumin` (Figure 5A). The minimal depth level by feature (Figure 5B) provides more advanced details about the tree building process. For instance, we can see that the random-effects of `serBilir` (indicating by bi0 and bi1 in the graph) are the earliest features used on 199 and 197 out of 200 trees, respectively.
+
+### Individual Conditional Expectation (ICE) and Partial Dependence Plots (PDP)
+
+To further investigate the effect of predictors on the predicted outcome, the `compute_ice_pdp()` function allows to quantify and visualize the relationship between a predictor and the predicted cumulative incidence function.   
+
+- **Partial Dependence Plot (PDP)** provides the average effect of a predictor on the predicted outcome, marginalizing over all other predictors.  
+- **Individual Conditional Expectation (ICE)** plots display the effect of a predictor for each individual, highlighting subject-specific heterogeneity in predictor effects.  
+
+Using an object returned by `compute_ice_pdp()`, the `plot()` function allows to visualize both ICE and PDP curves. The `type` argument defines whether ICE or PDP curves are displayed (or both).
+
+```{r, eval = FALSE, echo = TRUE}
+# compute ice and pdp for two values of the age
+ice_pdp_age <- compute_ice_pdp(
+  dynforest_obj = res_dyn,
+  var_name = "age",
+  values = c(30,70)
+  t0 = 4        # landmark time
+)
+
+plot(ice_pdp_age, type = "both")
+```
+
+```{r, eval=TRUE, echo = FALSE}
+# rajouter grahique ICE et PDP 
+```
+
+To go further in analyzing variable effects, you can refer to the vignette specifically designed to explain the functioning of ICE and PDP in dynforest.
 
 ## Guidelines to tune the hyperparameters
 
