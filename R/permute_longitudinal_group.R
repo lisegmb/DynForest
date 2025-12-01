@@ -14,8 +14,7 @@
 #' @return A data.frame containing the new trajectory for subject A.
 #' @export
 permute_longitudinal_group <- function(Longitudinal, id_var, time_var,
-                                       marker_indices, idA, idB, seed = NULL) {
-  if (!is.null(seed)) set.seed(seed)
+                                       marker_indices, idA, idB) {
 
   marker_names <- colnames(Longitudinal$X)
   selected_markers <- marker_names[marker_indices]
