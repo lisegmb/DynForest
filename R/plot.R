@@ -426,259 +426,212 @@ plot.dynforestpred <- function(x, id = NULL, ...){
 #' @rdname plot.dynforest
 #' @method plot dynforestpdp
 #' @export
-plot.dynforestpdp <- function(x, x_label = NULL, y_label = NULL,
-                              title = "ICE and PDP Plot", conf_band = FALSE, alpha = 0.2,
+plot.dynforestpdp <- function(x,
+                              x_label = NULL, y_label = NULL,
+                              title = "ICE and PDP Plot",
+                              conf_band = TRUE, alpha = 0.2,
                               type = c("both", "ice", "pdp"),
                               target_class = NULL, ...) {
+
   type <- match.arg(type)
-  df <- x
 
-  # ---------------------------------------------------------------
-  #  Detect the model type from the data structure
-  #  - Survival     → columns: id, replicate_id, time, value (+1 parameter)
-  #  - Classification → presence of 'target_class'
-  #  - Regression    → numeric response
-  # ---------------------------------------------------------------
-  if (all(c("id","replicate_id","time","value") %in% colnames(df)) && ncol(df) == 5) {
-    model_type <- "surv"
-  } else if ("target_class" %in% colnames(df)) {
-    model_type <- "factor"
-  } else {
-    model_type <- "numeric"
-  }
+  # Extract components from the dynforest object
+  ice_df <- x$ice
+  pdp_df <- x$pdp
+  model_type <- x$model_type
+  var_type   <- x$var_type
 
-  # ---------------------------------------------------------------
-  #  Identify the variable of interest (the one varied in PDP/ICE)
-  # ---------------------------------------------------------------
-  exclude_cols <- c("id","replicate_id","value")
-  if (model_type=="surv") exclude_cols <- c(exclude_cols,"time")
-  if (model_type=="factor") exclude_cols <- c(exclude_cols,"target_class")
+  # Ensure ID column is character
+  if ("id" %in% names(ice_df)) ice_df$id <- as.character(ice_df$id)
+  if ("id" %in% names(pdp_df)) pdp_df$id <- as.character(pdp_df$id)
 
-  var_cols <- setdiff(colnames(df), exclude_cols)
-  color_var <- if(length(var_cols)>0) var_cols[1] else NULL
+  # Determine x variable
+  x_var <- setdiff(colnames(ice_df),
+                   c("id","replicate_id","ice_value","time","target_class","transformation"))
+  if (length(x_var) == 0 && "transformation" %in% colnames(ice_df)) x_var <- "transformation"
+  x_var <- x_var[1]
 
-  # ---------------------------------------------------------------
-  #  Determine the type of the variable of interest
-  #  numeric  → continuous predictor
-  #  factor   → categorical predictor
-  #  longitudinal → dynamic time-varying predictor
-  # ---------------------------------------------------------------
-  var_type <- if (!is.null(color_var)) class(df[[color_var]])[1] else NA
-  var_type <- ifelse(var_type %in% c("numeric","integer"), "numeric",
-                     ifelse(var_type %in% c("factor"), "factor", "longitudinal"))
+  y_ice <- "ice_value"
+  y_pdp <- "pdp_value"
 
-  # ---------------------------------------------------------------
-  #  Automatic axis labels depending on the model type
-  # ---------------------------------------------------------------
-  if (is.null(y_label)) {
+  # Set axis labels
+  if(is.null(y_label))
     y_label <- switch(model_type,
-                      surv = "Predicted risk (CIF)",
+                      surv   = "Predicted risk (CIF)",
                       factor = "Predicted probability",
                       numeric = "Predicted value")
+  if(is.null(x_label)) x_label <- x_var
+
+  # Filter for a specific class (classification)
+  if (model_type == "factor" && !is.null(target_class)) {
+    ice_df <- ice_df %>% filter(target_class %in% target_class)
+    pdp_df <- pdp_df %>% filter(target_class %in% target_class)
   }
-  if (is.null(x_label)) {
-    if (model_type == "surv") {
-      x_label <- "Time"
+
+  # Survival: convert numeric predictor to factor
+  if (model_type == "surv" && var_type == "numeric") {
+    ice_df[[x_var]] <- factor(ice_df[[x_var]])
+    pdp_df[[x_var]] <- factor(pdp_df[[x_var]])
+  }
+
+  # ---------------------------- ICE PLOT ----------------------
+  if(model_type == "numeric") {
+    if (var_type == "numeric") {
+      p_ICE <- ggplot(ice_df, aes(x = .data[[x_var]], y = .data[[y_ice]], group = id)) +
+        geom_line(alpha = 0.3)
     } else {
-      x_label <- if (!is.null(color_var)) color_var else ""
+      p_ICE <- ggplot(ice_df, aes(x = .data[[x_var]], y = .data[[y_ice]], fill = .data[[x_var]])) +
+        geom_boxplot(alpha = 0.5)
     }
-  }
-
-  # ---------------------------------------------------------------
-  #  Filter for a specific class (classification only)
-  # ---------------------------------------------------------------
-  if (model_type=="factor" && !is.null(target_class)) {
-    df <- df[df$target_class %in% target_class, , drop=FALSE]
-  }
-
-  p_ICE <- NULL
-  p_PDP <- NULL
-
-  # ===============================================================
-  #                        SURVIVAL MODELS
-  # ===============================================================
-  if(model_type=="surv") {
-
-    # Identify the variable used for color/facets
-    extra_cols <- setdiff(colnames(df), c("id","replicate_id","time","value"))
-    color_var_plot <- if ("transformation" %in% colnames(df)) "transformation"
-    else if(length(extra_cols)>0) extra_cols[1] else NULL
-
-    if(!is.null(color_var_plot))
-      df[[color_var_plot]] <- factor(df[[color_var_plot]], levels=sort(unique(df[[color_var_plot]])))
-
-    # -------------------------- ICE PLOT --------------------------
-    p_ICE <- ggplot(df, aes(x=time, y=value,
-                            group=interaction(id, .data[[color_var_plot]]),
-                            color=.data[[color_var_plot]])) +
-      geom_line(alpha=0.5, linewidth=0.7) +
-      labs(x=x_label, y=y_label, title=paste("ICE -", title), color=color_var_plot) +
+    p_ICE <- p_ICE + labs(title = paste("ICE -", title),
+                          x = x_label, y = y_label) +
       theme_minimal()
 
-    # -------------------------- PDP PLOT --------------------------
-    df_mean <- df %>%
-      group_by(time, .data[[color_var_plot]]) %>%
-      summarise(mean_value = mean(value),
-                var_mc = stats::var(value)/n(),
-                n = n(),
-                .groups="drop") %>%
-      mutate(se_mc = sqrt(var_mc),
-             lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else 0,
-             upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else 0)
+  } else if(model_type == "factor") {
+    if (var_type == "numeric") {
+      p_ICE <- ggplot(ice_df,
+                      aes(x = .data[[x_var]], y = .data[[y_ice]],
+                          color = target_class,
+                          group = interaction(id, target_class))) +
+        geom_line(alpha = 0.4) +
+        labs(color = "Class")
+    } else {
+      p_ICE <- ggplot(ice_df,
+                      aes(x = .data[[x_var]], y = .data[[y_ice]], fill = .data[[x_var]])) +
+        geom_boxplot(alpha = 0.5) +
+        facet_wrap(~target_class)
+    }
+    p_ICE <- p_ICE + labs(title = paste("ICE -", title),
+                          x = x_label, y = y_label) +
+      theme_minimal()
 
-    p_PDP <- ggplot(df_mean, aes(x=time, y=mean_value,
-                                 color=.data[[color_var_plot]],
-                                 fill=.data[[color_var_plot]])) +
-      geom_line(linewidth=1) +
-      geom_ribbon(aes(ymin=lower, ymax=upper), alpha=alpha, color=NA) +
-      labs(x=x_label, y=y_label, title=paste("PDP -", title),
-           color=color_var_plot, fill=color_var_plot) +
+  } else if(model_type == "surv") {
+    p_ICE <- ggplot(ice_df,
+                    aes(x = time, y = ice_value,
+                        color = .data[[x_var]],
+                        group = interaction(id, .data[[x_var]]))) +
+      geom_line(alpha = 0.4) +
+      labs(title = paste("ICE -", title),
+           x = "Time", y = y_label,
+           color = x_var) +
       theme_minimal()
   }
 
-  # ===============================================================
-  #                REGRESSION + CLASSIFICATION MODELS
-  # ===============================================================
-  else if(model_type %in% c("numeric","factor")) {
+  # ---------------------------- PDP PLOT ----------------------
+  if (model_type == "numeric" && var_type == "numeric") {
+    p_PDP <- ggplot(pdp_df, aes(x = .data[[x_var]], y = .data[[y_pdp]])) +
+      geom_line(linewidth = 1)
 
-    # x-axis variable
-    x_val <- if(var_type=="longitudinal") "transformation" else color_var
-    y_val <- "value"
-
-    # ---------------------------------------------------------------
-    #     Classification + numeric predictor
-    # ---------------------------------------------------------------
-    if(model_type=="factor" && var_type=="numeric") {
-
-      # -------------------------- ICE --------------------------
-      p_ICE <- ggplot(df, aes_string(
-        x = x_val, y = y_val,
-        group = "interaction(id, target_class)",
-        color = "target_class"
-      )) +
-        geom_line(alpha = 0.4, linewidth = 0.7) +
-        labs(x = x_label, y = y_label, title = paste("ICE -", title), color = "Class") +
-        theme_minimal()
-
-      # -------------------------- PDP --------------------------
-      df_mean <- df %>%
-        group_by(.data[[x_val]], target_class) %>%
-        summarise(mean_value = mean(value),
-                  var_mc = stats::var(value)/n(),
-                  n = n(),
-                  .groups="drop") %>%
-        mutate(se_mc = sqrt(var_mc),
-               lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA,
-               upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA)
-
-      p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value",
-                                          color="target_class", fill="target_class")) +
-        geom_line(linewidth=1) +
-        {if(conf_band) geom_ribbon(aes(ymin=lower, ymax=upper), alpha=alpha, color=NA) else NULL} +
-        labs(x=x_label, y=y_label, title=paste("PDP -", title),
-             color="Class", fill="Class") +
-        theme_minimal()
+    if (conf_band && all(c("lower","upper") %in% colnames(pdp_df))) {
+      p_PDP <- p_PDP +
+        geom_ribbon(aes(ymin = lower, ymax = upper, group = 1),
+                    alpha = alpha, fill = "blue", color = NA)
     }
+    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
+                          x = x_label, y = y_label) + theme_minimal()
 
-    # ---------------------------------------------------------------
-    # Classification + categorical or longitudinal predictor
-    # ---------------------------------------------------------------
-    else if(model_type=="factor" && var_type %in% c("factor","longitudinal")) {
+  } else if (model_type == "numeric") {
+    df_mean <- pdp_df %>%
+      group_by(.data[[x_var]]) %>%
+      summarise(mean_value = mean(pdp_value),
+                sd_value   = pdp_sd,
+                lower = mean(lower),
+                upper = mean(upper),
+                .groups = "drop")
 
-      # -------------------------- ICE --------------------------
-      p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, fill=x_val)) +
-        geom_boxplot(alpha=0.5) +
-        labs(x=x_label, y=y_label, title=paste("ICE -", title), fill=x_val) +
-        theme_minimal() +
-        facet_wrap(~target_class,
-                   labeller = labeller(target_class = function(x) paste0("Class : ", x)))
+    w <- 0.5 * (1 / nlevels(as.factor(df_mean[[x_var]])))
 
-      # -------------------------- PDP --------------------------
-      df_mean <- df %>%
-        group_by(.data[[x_val]], target_class) %>%
-        summarise(mean_value = mean(value),
-                  sd_value = stats::sd(value),
-                  n = n(),
-                  .groups="drop") %>%
-        mutate(lower = mean_value - sd_value,
-               upper = mean_value + sd_value,
-               lower_band = if(conf_band) mean_value - stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA,
-               upper_band = if(conf_band) mean_value + stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA)
+    p_PDP <- ggplot(df_mean, aes(x = .data[[x_var]], y = mean_value)) +
+      geom_point(size = 3) +
+      geom_errorbar(aes(ymin = mean_value - sd_value,
+                        ymax = mean_value + sd_value),
+                    width = w) +
+      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                       xend = as.numeric(.data[[x_var]]) + w,
+                                       y = lower, yend = lower),
+                                   linewidth = 0.7, alpha = 0.5) } +
+      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                       xend = as.numeric(.data[[x_var]]) + w,
+                                       y = upper, yend = upper),
+                                   linewidth = 0.7, alpha = 0.5) } +
+      labs(title = paste("PDP -", title),
+           x = x_label, y = y_label) +
+      theme_minimal()
 
-      p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
-        geom_point(size=3) +
-        geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2) +
-        {if(conf_band) geom_errorbar(aes(ymin=lower_band, ymax=upper_band),
-                                     width=0.5, color="blue", alpha=0.3) else NULL} +
-        labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
-        theme_minimal() +
-        facet_wrap(~target_class,
-                   labeller = labeller(target_class = function(x) paste0("Class : ", x)))
+  } else if (model_type == "factor" && var_type == "numeric") {
+    p_PDP <- ggplot(pdp_df,
+                    aes(x = .data[[x_var]], y = .data[[y_pdp]],
+                        color = target_class, fill = target_class)) +
+      geom_line(linewidth = 1)
+    if (conf_band && all(c("lower","upper") %in% colnames(pdp_df))) {
+      p_PDP <- p_PDP +
+        geom_ribbon(aes(ymin = lower, ymax = upper, group = target_class),
+                    alpha = alpha, color = NA)
     }
+    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
+                          x = x_label, y = y_label, color = "Class") +
+      theme_minimal()
 
-    # ---------------------------------------------------------------
-    # Regression models
-    # ---------------------------------------------------------------
-    else if(model_type=="numeric") {
+  } else if (model_type == "factor") {
+    df_mean <- pdp_df %>%
+      group_by(.data[[x_var]], target_class) %>%
+      summarise(mean_value = mean(pdp_value),
+                sd_value   = pdp_sd,
+                lower = mean(lower),
+                upper = mean(upper),
+                .groups = "drop")
 
-      # -------------------------- ICE --------------------------
-      if(var_type=="numeric") {
-        p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, group="id")) +
-          geom_line(alpha=0.5) +
-          labs(x=x_label, y=y_label, title=paste("ICE -", title)) +
-          theme_minimal()
-      } else {
-        p_ICE <- ggplot(df, aes_string(x=x_val, y=y_val, fill=x_val)) +
-          geom_boxplot(alpha=0.5) +
-          labs(x=x_label, y=y_label, title=paste("ICE -", title), fill=x_val) +
-          theme_minimal()
-      }
+    w <- 0.3
 
-      # -------------------------- PDP --------------------------
-      if(var_type=="numeric") {
-        df_mean <- df %>%
-          group_by(.data[[x_val]]) %>%
-          summarise(mean_value = mean(value),
-                    var_mc = stats::var(value)/n(),
-                    n = n(),
-                    .groups="drop") %>%
-          mutate(se_mc = sqrt(var_mc),
-                 lower = mean_value - if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA,
-                 upper = mean_value + if(conf_band) stats::qt(0.975, df=pmax(n-1,1))*se_mc else NA)
+    p_PDP <- ggplot(df_mean, aes(x = .data[[x_var]], y = mean_value)) +
+      geom_point(size = 3) +
+      geom_errorbar(aes(ymin = mean_value - sd_value,
+                        ymax = mean_value + sd_value),
+                    width = w, color = "black") +
+      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                       xend = as.numeric(.data[[x_var]]) + w,
+                                       y = lower, yend = lower),
+                                   linewidth = 0.7, alpha = 0.5) } +
+      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                       xend = as.numeric(.data[[x_var]]) + w,
+                                       y = upper, yend = upper),
+                                   linewidth = 0.7, alpha = 0.5) } +
+      facet_wrap(~target_class) +
+      labs(title = paste("PDP -", title),
+           x = x_label, y = y_label) +
+      theme_minimal()
 
-        p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
-          geom_line(linewidth=1, color="blue") +
-          {if(conf_band) geom_ribbon(aes(ymin=lower, ymax=upper),
-                                     alpha=alpha, fill="blue", color=NA) else NULL} +
-          labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
-          theme_minimal()
-      } else {
-        df_mean <- df %>%
-          group_by(.data[[x_val]]) %>%
-          summarise(mean_value = mean(value),
-                    sd_value = stats::sd(value),
-                    n = n(),
-                    .groups="drop") %>%
-          mutate(lower = mean_value - sd_value,
-                 upper = mean_value + sd_value,
-                 lower_band = if(conf_band) mean_value - stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA,
-                 upper_band = if(conf_band) mean_value + stats::qt(0.975, df=pmax(n-1,1))*sd_value/sqrt(n) else NA)
+  } else if (model_type == "surv") {
+    pdp_mean <- pdp_df %>%
+      group_by(time, .data[[x_var]]) %>%
+      summarise(mean_value = mean(pdp_value),
+                lower_mean = if (conf_band) mean(lower) else NA,
+                upper_mean = if (conf_band) mean(upper) else NA,
+                .groups = "drop")
 
-        p_PDP <- ggplot(df_mean, aes_string(x=x_val, y="mean_value")) +
-          geom_point(size=3) +
-          geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2) +
-          {if(conf_band) geom_errorbar(aes(ymin=lower_band, ymax=upper_band),
-                                       width=0.5, color="blue", alpha=0.3) else NULL} +
-          labs(x=x_label, y=y_label, title=paste("PDP -", title)) +
-          theme_minimal()
-      }
+    p_PDP <- ggplot(pdp_mean,
+                    aes(x = time, y = mean_value,
+                        color = .data[[x_var]], fill = .data[[x_var]])) +
+      geom_line(aes(group = .data[[x_var]]), linewidth = 1)
+    if (conf_band) {
+      p_PDP <- p_PDP +
+        geom_ribbon(
+          aes(ymin = lower_mean, ymax = upper_mean,
+              group = .data[[x_var]]),
+          alpha = alpha, color = NA
+        )
     }
+    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
+                          x = "Time", y = y_label,
+                          color = x_var, fill = x_var) +
+      theme_minimal()
   }
 
-  # ---------------------------------------------------------------
-  #  Final output depending on selected type
-  # ---------------------------------------------------------------
-  if(type=="ice"){ print(p_ICE); return(invisible(p_ICE)) }
-  else if(type=="pdp"){ print(p_PDP); return(invisible(p_PDP)) }
-  else { print(p_ICE); print(p_PDP); return(invisible(list(ICE=p_ICE, PDP=p_PDP))) }
+  # Print and return
+  if(type == "ice"){ print(p_ICE); return(invisible(p_ICE)) }
+  if(type == "pdp"){ print(p_PDP); return(invisible(p_PDP)) }
+
+  print(p_ICE)
+  print(p_PDP)
+  invisible(list(ICE = p_ICE, PDP = p_PDP))
 }
