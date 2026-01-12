@@ -329,9 +329,14 @@ ice_pdp_age <- compute_ice_pdp(
 plot(ice_pdp_age, type = "both")
 ```
 
-```{r, eval=TRUE, echo = FALSE}
-# rajouter grahique ICE et PDP 
+
+```{r, echo=FALSE, fig.show = 'hold', fig.align='center'}
+knitr::include_graphics("Figures/DynForestR_surv_ICE.png")
+knitr::include_graphics("Figures/DynForestR_surv_PDP.png")
+
 ```
+
+
 
 To go further in analyzing variable effects, you can refer to the vignette specifically designed to explain the functioning of ICE and PDP in dynforest.
 
