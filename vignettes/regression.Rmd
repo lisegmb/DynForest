@@ -141,7 +141,36 @@ head(print(pred_dyn))
 
 For instance, we predicted 5.22 for subject 1, -1.28 for subject 2 and 0.86 for subject 3.
 
+
+
+
 ## Predictiveness of the variables 
+
+### Individual Conditional Expectation (ICE) and Partial Dependence Plots (PDP)
+
+To further investigate the effect of predictors on the predicted outcome, the `compute_ice_pdp()` function allows to quantify and visualize the relationship between a predictor and the predicted cumulative incidence function.   
+
+- **Partial Dependence Plot (PDP)** provides the average effect of a predictor on the predicted outcome, marginalizing over all other predictors.  
+- **Individual Conditional Expectation (ICE)** plots display the effect of a predictor for each individual, highlighting subject-specific heterogeneity in predictor effects.  
+
+Using an object returned by `compute_ice_pdp()`, the `plot()` function allows to visualize both ICE and PDP curves. The `type` argument defines whether ICE or PDP curves are displayed (or both).
+
+```{r, eval=FALSE, echo=TRUE}
+res_num_bin1 <- compute_ice_pdp(
+    model     = res_dyn,
+    var_name = "bin_covar1")
+
+plot(res_num_bin1, type = "both", conf_band = TRUE)
+
+```
+
+```{r, echo=FALSE, fig.show = 'hold', fig.align='center'}
+knitr::include_graphics("Figures/DynForestR_reg_ICE.png")
+knitr::include_graphics("Figures/DynForestR_reg_PDP.png")
+
+```
+
+### Minimal depth
 
 In this illustration, we want to evaluate if \CRANpkg{DynForest} can identify the true predictors (i.e., random intercept of marker1 and random slope of marker2). To do this, we used the minimal depth which allows to understand the random forest at the feature level.
 
