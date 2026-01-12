@@ -14,6 +14,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+library(png)
 ```
 
 ## Illustrative dataset: `pbc2` dataset
@@ -70,7 +71,7 @@ Y <- list(type = "factor",
 
 We executed `dynforest()` function to build the random forest with hyperparameters `mtry` = 7 and `nodesize` = 2 as follows:
   
-```{r, eval = FALSE, echo = TRUE}
+```{r,eval = FALSE, echo = TRUE}
 res_dyn <- dynforest(timeData = timeData_train, 
                      fixedData = fixedData_train,
                      timeVar = "time", idVar = "id", 
@@ -159,6 +160,8 @@ As shown in this example, some predictions are made with varying confidence from
 ### Variable importance
 
 The most predictive variables can be identified using `compute_vimp()` and displayed using `plot()` function as follows:
+Note that for both `compute_vimp()` and `compute_gvimp()`, the argument `permute_trajectory = TRUE` allows permuting entire longitudinal trajectories between subjects. By default (`FALSE`), the values of each marker are permuted observation by observation. This option is useful when the goal is to preserve the temporal correlation structure within each trajectory while assessing variable importance.
+
   
 ```{r, eval = FALSE, echo = TRUE}
 res_dyn_VIMP <- compute_vimp(dynforest_obj = res_dyn_OOB, seed = 123)
@@ -170,6 +173,33 @@ knitr::include_graphics("Figures/DynForestR_classi_VIMP.png")
 ```
 
 Again, we found that the most predictive variable is `serBilir`. When perturbating `serBilir`, the OOB prediction error was increased by 15\%.
+
+### Individual Conditional Expectation (ICE) and Partial Dependence Plots (PDP)
+
+To further investigate the effect of predictors on the predicted outcome, the `compute_ice_pdp()` function allows to quantify and visualize the relationship between a predictor and the predicted cumulative incidence function.   
+
+- **Partial Dependence Plot (PDP)** provides the average effect of a predictor on the predicted outcome, marginalizing over all other predictors.  
+- **Individual Conditional Expectation (ICE)** plots display the effect of a predictor for each individual, highlighting subject-specific heterogeneity in predictor effects.  
+
+Using an object returned by `compute_ice_pdp()`, the `plot()` function allows to visualize both ICE and PDP curves. The `type` argument defines whether ICE or PDP curves are displayed (or both).
+
+```{r, eval=FALSE, echo=TRUE}
+res_cat_age <- compute_ice_pdp(
+    model     = res_dyn,
+    var_name = "age",
+    grid_type = "regular"
+  )
+plot(res_cat_age, type = "both", conf_band = TRUE)
+
+```
+
+```{r, echo=FALSE, fig.show = 'hold', fig.align='center'}
+knitr::include_graphics("Figures/DynForestR_classi_ICE.png")
+knitr::include_graphics("Figures/DynForestR_classi_PDP.png")
+
+```
+
+
 
 ### Minimal depth
 
