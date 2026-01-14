@@ -1,75 +1,40 @@
-#' Compute the importance of variables (VIMP) statistic
+#' Compute the variable importance (VIMP) statistic for a dynforest object
 #'
-#' @param dynforest_obj dynforest_obj \code{dynforest} object.
-#' @param IBS.min (Only with survival outcome) Minimal time to compute the Integrated Brier Score. Default value is set to 0.
-#' @param IBS.max (Only with survival outcome) Maximal time to compute the Integrated Brier Score. Default value is set to the maximal time-to-event found.
-#' @param ncores Number of cores used to grow trees in parallel. Default value is the number of cores of the computer minus 1.
-#' @param seed Seed to replicate results. Default is 1234.
-#' @param permute_trajectory Logical. If TRUE, longitudinal markers are permuted by swapping trajectories between subjects; if FALSE, markers are shuffled independently. Default is FALSE.
+#' This function computes the importance of predictors for a dynforest object.
+#' Longitudinal markers can be permuted either by shuffling values or swapping entire trajectories between subjects.
 #'
-#' @importFrom methods is
-#' @import doRNG
+#' @param dynforest_obj A \code{dynforest} object
+#' @param IBS.min (Survival only) Minimal time to compute Integrated Brier Score. Default is 0
+#' @param IBS.max (Survival only) Maximal time to compute Integrated Brier Score. Default is maximal observed time
+#' @param ncores Number of cores to use for parallel computation. Default: all cores minus 1
+#' @param seed Random seed for reproducibility. Default: 1234
+#' @param permute_trajectory Logical. If TRUE, longitudinal markers are permuted by swapping trajectories between subjects; if FALSE, markers are permuted independently. Default is FALSE
 #'
-#' @return \code{compute_vimp()} function returns a list with the following elements:\tabular{ll}{
-#'    \code{Inputs} \tab A list of 3 elements: \code{Longitudinal}, \code{Numeric} and \code{Factor}. Each element contains the names of the predictors \cr
-#'    \tab \cr
-#'    \code{Importance} \tab A list of 3 elements: \code{Longitudinal}, \code{Numeric} and \code{Factor}. Each element contains a numeric vector of VIMP statistic predictor in \code{Inputs} value \cr
-#'    \tab \cr
-#'    \code{tree_oob_err} \tab A numeric vector containing the OOB error for each tree needed to compute the VIMP statistic \cr
-#'    \tab \cr
-#'    \code{IBS.range} \tab A vector containing the IBS min and max \cr
-#'    \tab \cr
-#'    \code{permute_trajectory} \tab Logical flag indicating whether longitudinal trajectories were permuted as whole trajectories or shuffled independently \cr
+#' @return A list containing:
+#' \tabular{ll}{
+#'   \code{Inputs} \tab Names of predictors separated by type (Longitudinal, Numeric, Factor) \cr
+#'   \code{Importance} \tab List of VIMP values for Longitudinal, Numeric, and Factor predictors \cr
+#'   \code{tree_oob_err} \tab OOB error for each tree \cr
+#'   \code{IBS.range} \tab Vector with IBS min and max
 #' }
-#'
 #' @export
-#'
-#' @seealso [dynforest()]
-#'
-#' @examples
-#' \donttest{
-#' data(pbc2)
-#' pbc2$serBilir <- log(pbc2$serBilir)
-#' pbc2$SGOT <- log(pbc2$SGOT)
-#' pbc2$albumin <- log(pbc2$albumin)
-#' pbc2$alkaline <- log(pbc2$alkaline)
-#' set.seed(1234)
-#' id <- unique(pbc2$id)
-#' id_sample <- sample(id, 100)
-#' id_row <- which(pbc2$id %in% id_sample)
-#' pbc2_train <- pbc2[id_row, ]
-#' timeData_train <- pbc2_train[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
-#' timeVarModel <- list(
-#'   serBilir = list(fixed = serBilir ~ time, random = ~ time),
-#'   SGOT = list(fixed = SGOT ~ time + I(time^2), random = ~ time + I(time^2)),
-#'   albumin = list(fixed = albumin ~ time, random = ~ time),
-#'   alkaline = list(fixed = alkaline ~ time, random = ~ time)
-#' )
-#' fixedData_train <- unique(pbc2_train[, c("id", "age", "drug", "sex")])
-#' Y <- list(type = "surv", Y = unique(pbc2_train[, c("id", "years", "event")]))
-#' res_dyn <- dynforest(timeData = timeData_train, fixedData = fixedData_train,
-#'                      timeVar = "time", idVar = "id",
-#'                      timeVarModel = timeVarModel, Y = Y,
-#'                      ntree = 50, nodesize = 5, minsplit = 5,
-#'                      cause = 2, ncores = 2, seed = 1234)
-#' res_dyn_VIMP <- compute_vimp(dynforest_obj = res_dyn, ncores = 2, seed = 1234,
-#'                              permute_trajectory = TRUE)
-#' }
-
 compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
                          ncores = NULL, seed = 1234, permute_trajectory = FALSE) {
 
+  # Check input object
   if (!methods::is(dynforest_obj, "dynforest")) {
     cli::cli_abort(c(
       "{.var dynforest_obj} must be a dynforest object",
-      "x" = "You supplied a {.cls {class(dynforest_obj)}} object"
+      "x" = paste0("You supplied a {.cls {class(dynforest_obj)}} object")
     ))
   }
 
+  # Set IBS.max for survival outcome if missing
   if (dynforest_obj$type == "surv" && is.null(IBS.max)) {
     IBS.max <- max(dynforest_obj$data$Y$Y[, 1])
   }
 
+  # Extract data from dynforest object
   rf <- dynforest_obj
   Longitudinal <- rf$data$Longitudinal
   Numeric <- rf$data$Numeric
@@ -80,9 +45,15 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   ntree <- ncol(rf$rf)
   Inputs <- names(rf$Inputs[!sapply(rf$Inputs, is.null)])
 
+  # Force all IDs as factors
+  Longitudinal$id <- as.factor(Longitudinal$id)
+  if (!is.null(Numeric)) Numeric$id <- as.factor(Numeric$id)
+  if (!is.null(Factor)) Factor$id <- as.factor(Factor$id)
+
   if (is.null(ncores)) ncores <- parallel::detectCores() - 1
   pbapply::pboptions(type = "none")
 
+  # Compute baseline OOB errors for all trees
   cl <- parallel::makeCluster(ncores)
   doParallel::registerDoParallel(cl)
   parallel::clusterEvalQ(cl, {
@@ -97,8 +68,10 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
   }, cl = cl)
   suppressWarnings(parallel::stopCluster(cl))
 
+  # Initialize importance vectors
   Importance <- list(Longitudinal = NULL, Numeric = NULL, Factor = NULL)
 
+  # Compute VIMP for longitudinal predictors
   if ("Longitudinal" %in% Inputs) {
     marker_names <- colnames(Longitudinal$X)
     Importance$Longitudinal <- numeric(length(marker_names))
@@ -108,6 +81,7 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
     for (p in seq_along(marker_names)) {
       set.seed(seed + p)
 
+      # Shuffle values independently or swap full trajectories
       if (!permute_trajectory) {
         Longitudinal.perm <- Longitudinal
         Longitudinal.perm$X[, p] <- sample(na.omit(Longitudinal$X[, p]),
@@ -119,7 +93,6 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
           idB_choices <- setdiff(all_ids, idA)
           if (length(idB_choices) == 0) next
           idB <- sample(idB_choices, 1)
-
           df_long_perm <- rbind(df_long_perm,
                                 permute_longitudinal_group(
                                   Longitudinal = Longitudinal,
@@ -127,8 +100,7 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
                                   time_var = timeVar,
                                   marker_indices = p,
                                   idA = idA,
-                                  idB = idB,
-                                  seed = seed + p + as.integer(idA)
+                                  idB = idB
                                 ))
         }
 
@@ -161,6 +133,7 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
     }
   }
 
+  # Compute VIMP for numeric predictors
   if ("Numeric" %in% Inputs) {
     library(foreach)
     library(doRNG)
@@ -186,6 +159,7 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
     suppressWarnings(parallel::stopCluster(cl))
   }
 
+  # Compute VIMP for factor predictors
   if ("Factor" %in% Inputs) {
     library(foreach)
     library(doRNG)
@@ -211,6 +185,7 @@ compute_vimp <- function(dynforest_obj, IBS.min = 0, IBS.max = NULL,
     suppressWarnings(parallel::stopCluster(cl))
   }
 
+  # Return results
   out <- list(
     Inputs = dynforest_obj$Inputs,
     Importance = Importance,
