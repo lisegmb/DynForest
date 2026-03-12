@@ -9,7 +9,6 @@
 #' @param marker_indices Indices of the markers to permute.
 #' @param idA The ID of the subject whose trajectories will be replaced.
 #' @param idB The ID of the subject whose trajectories will be used for replacement.
-#' @param seed Optional seed for reproducibility.
 #'
 #' @return A data.frame containing the new trajectory for subject A.
 #' @export

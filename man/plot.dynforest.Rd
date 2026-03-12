@@ -21,18 +21,17 @@
 
 \method{plot}{dynforestpdp}(
   x,
-  x_label = NULL,
-  y_label = NULL,
-  title = "ICE and PDP Plot",
-  conf_band = TRUE,
-  alpha = 0.2,
   type = c("both", "ice", "pdp"),
   target_class = NULL,
+  conf_band = TRUE,
   ...
 )
 }
 \arguments{
-\item{x}{Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively plot the CIF, the minimal depth, the variable importance, grouped variable importance, or ICE/PDP plots.}
+\item{x}{Object inheriting from classes \code{dynforest}, \code{dynforestvardepth},
+\code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively
+plot the CIF, the minimal depth, the variable importance, grouped variable importance,
+or ICE/PDP plots.}
 
 \item{tree}{For \code{dynforest} class, integer indicating the tree identifier.}
 
@@ -42,7 +41,7 @@
 
 \item{max_tree}{For \code{dynforest} class, integer indicating the number of trees to display when using \code{id} argument.}
 
-\item{...}{Optional parameters to be passed to the low level function.}
+\item{...}{Optional parameters to be passed to the low level function (currently none used for axis labels or titles; these are fixed within the function).}
 
 \item{plot_level}{For \code{dynforestvardepth} class, compute the statistic at predictor (\code{plot_level} = "predictor") or feature (\code{plot_level} = "feature") level.}
 
@@ -50,11 +49,11 @@
 
 \item{ordering}{For \code{dynforestvimp} class, logical to order predictors according to VIMP value. Default is TRUE.}
 
-\item{conf_band}{For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is FALSE.}
-
-\item{alpha}{For \code{dynforestpdp} class, numeric specifying the transparency level of the confidence band. Default is 0.2.}
-
 \item{type}{For \code{dynforestpdp} class, character indicating the plot type to display: "both" (default), "ice", or "pdp".}
+
+\item{target_class}{For \code{dynforestpdp} class, character specifying the class to plot (only for factor outcomes). Default is NULL (all classes).}
+
+\item{conf_band}{For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is TRUE.}
 }
 \value{
 \code{plot()} function displays:
@@ -65,7 +64,8 @@ With \code{dynforestvimp} \tab the VIMP for each predictor \cr
 \cr
 With \code{dynforestgvimp} \tab the grouped-VIMP for each given group \cr
 \cr
-With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with optional confidence bands \cr
+With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with fixed axis labels and titles,
+and optional confidence bands \cr
 }
 }
 \description{

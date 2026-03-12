@@ -25,8 +25,6 @@ permute_longitudinal_group(
 \item{idA}{The ID of the subject whose trajectories will be replaced.}
 
 \item{idB}{The ID of the subject whose trajectories will be used for replacement.}
-
-\item{seed}{Optional seed for reproducibility.}
 }
 \value{
 A data.frame containing the new trajectory for subject A.

@@ -5,7 +5,10 @@
 #' the variable importance (for class \code{dynforestvimp}), grouped variable importance (for class \code{dynforestgvimp}),
 #' or ICE and PDP plots (for class \code{dynforestpdp}).
 #'
-#' @param x Object inheriting from classes \code{dynforest}, \code{dynforestvardepth}, \code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively plot the CIF, the minimal depth, the variable importance, grouped variable importance, or ICE/PDP plots.
+#' @param x Object inheriting from classes \code{dynforest}, \code{dynforestvardepth},
+#'   \code{dynforestvimp}, \code{dynforestgvimp}, or \code{dynforestpdp}, to respectively
+#'   plot the CIF, the minimal depth, the variable importance, grouped variable importance,
+#'   or ICE/PDP plots.
 #' @param tree For \code{dynforest} class, integer indicating the tree identifier.
 #' @param nodes For \code{dynforest} class, identifiers for the selected nodes.
 #' @param id For \code{dynforest} and \code{dynforestpred} classes, identifier for a given subject.
@@ -14,9 +17,9 @@
 #' @param PCT For \code{dynforestvimp} or \code{dynforestgvimp} classes, logical to display VIMP statistic in percentage. Default is FALSE.
 #' @param ordering For \code{dynforestvimp} class, logical to order predictors according to VIMP value. Default is TRUE.
 #' @param type For \code{dynforestpdp} class, character indicating the plot type to display: "both" (default), "ice", or "pdp".
-#' @param conf_band For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is FALSE.
-#' @param alpha For \code{dynforestpdp} class, numeric specifying the transparency level of the confidence band. Default is 0.2.
-#' @param ... Optional parameters to be passed to the low level function.
+#' @param conf_band For \code{dynforestpdp} class, logical indicating whether to display confidence bands around the PDP. Default is TRUE.
+#' @param target_class For \code{dynforestpdp} class, character specifying the class to plot (only for factor outcomes). Default is NULL (all classes).
+#' @param ... Optional parameters to be passed to the low level function (currently none used for axis labels or titles; these are fixed within the function).
 #'
 #' @import ggplot2 viridis dplyr tidyr magrittr
 #' @importFrom stringr str_order
@@ -31,9 +34,9 @@
 #'    \cr
 #'    With \code{dynforestgvimp} \tab the grouped-VIMP for each given group \cr
 #'    \cr
-#'    With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with optional confidence bands \cr
+#'    With \code{dynforestpdp} \tab ICE (Individual Conditional Expectation) and/or PDP (Partial Dependence Plot) with fixed axis labels and titles,
+#'    and optional confidence bands \cr
 #' }
-
 #'
 #' @examples
 #' \donttest{
@@ -427,11 +430,8 @@ plot.dynforestpred <- function(x, id = NULL, ...){
 #' @method plot dynforestpdp
 #' @export
 plot.dynforestpdp <- function(x,
-                              x_label = NULL, y_label = NULL,
-                              title = "ICE and PDP Plot",
-                              conf_band = TRUE, alpha = 0.2,
                               type = c("both", "ice", "pdp"),
-                              target_class = NULL, ...) {
+                              target_class = NULL, conf_band = TRUE, ...) {
 
   type <- match.arg(type)
 
@@ -454,13 +454,12 @@ plot.dynforestpdp <- function(x,
   y_ice <- "ice_value"
   y_pdp <- "pdp_value"
 
-  # Set axis labels
-  if(is.null(y_label))
-    y_label <- switch(model_type,
-                      surv   = "Predicted risk (CIF)",
-                      factor = "Predicted probability",
-                      numeric = "Predicted value")
-  if(is.null(x_label)) x_label <- x_var
+  # Axis labels based on model type
+  y_label <- switch(model_type,
+                    surv   = "Predicted risk (CIF)",
+                    factor = "Predicted probability",
+                    numeric = "Predicted value")
+  x_label <- x_var
 
   # Filter for a specific class (classification)
   if (model_type == "factor" && !is.null(target_class)) {
@@ -483,7 +482,7 @@ plot.dynforestpdp <- function(x,
       p_ICE <- ggplot(ice_df, aes(x = .data[[x_var]], y = .data[[y_ice]], fill = .data[[x_var]])) +
         geom_boxplot(alpha = 0.5)
     }
-    p_ICE <- p_ICE + labs(title = paste("ICE -", title),
+    p_ICE <- p_ICE + labs(title = "Individual Conditional Expectation",
                           x = x_label, y = y_label) +
       theme_minimal()
 
@@ -501,7 +500,7 @@ plot.dynforestpdp <- function(x,
         geom_boxplot(alpha = 0.5) +
         facet_wrap(~target_class)
     }
-    p_ICE <- p_ICE + labs(title = paste("ICE -", title),
+    p_ICE <- p_ICE + labs(title = "Individual Conditional Expectation",
                           x = x_label, y = y_label) +
       theme_minimal()
 
@@ -511,7 +510,7 @@ plot.dynforestpdp <- function(x,
                         color = .data[[x_var]],
                         group = interaction(id, .data[[x_var]]))) +
       geom_line(alpha = 0.4) +
-      labs(title = paste("ICE -", title),
+      labs(title = "Individual Conditional Expectation",
            x = "Time", y = y_label,
            color = x_var) +
       theme_minimal()
@@ -522,13 +521,14 @@ plot.dynforestpdp <- function(x,
     p_PDP <- ggplot(pdp_df, aes(x = .data[[x_var]], y = .data[[y_pdp]])) +
       geom_line(linewidth = 1)
 
-    if (conf_band && all(c("lower","upper") %in% colnames(pdp_df))) {
+    if (all(c("lower","upper") %in% colnames(pdp_df))) {
       p_PDP <- p_PDP +
         geom_ribbon(aes(ymin = lower, ymax = upper, group = 1),
-                    alpha = alpha, fill = "blue", color = NA)
+                    alpha = 0.2, fill = "blue", color = NA)
     }
-    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
-                          x = x_label, y = y_label) + theme_minimal()
+    p_PDP <- p_PDP + labs(title = "Partial Dependence Plot",
+                          x = x_label, y = y_label) +
+      theme_minimal()
 
   } else if (model_type == "numeric") {
     df_mean <- pdp_df %>%
@@ -546,15 +546,15 @@ plot.dynforestpdp <- function(x,
       geom_errorbar(aes(ymin = mean_value - sd_value,
                         ymax = mean_value + sd_value),
                     width = w) +
-      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
-                                       xend = as.numeric(.data[[x_var]]) + w,
-                                       y = lower, yend = lower),
-                                   linewidth = 0.7, alpha = 0.5) } +
-      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
-                                       xend = as.numeric(.data[[x_var]]) + w,
-                                       y = upper, yend = upper),
-                                   linewidth = 0.7, alpha = 0.5) } +
-      labs(title = paste("PDP -", title),
+      { if(all(c("lower","upper") %in% colnames(df_mean))) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                                                            xend = as.numeric(.data[[x_var]]) + w,
+                                                                            y = lower, yend = lower),
+                                                                        linewidth = 0.7, alpha = 0.2) } +
+      { if(all(c("lower","upper") %in% colnames(df_mean))) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
+                                                                            xend = as.numeric(.data[[x_var]]) + w,
+                                                                            y = upper, yend = upper),
+                                                                        linewidth = 0.7, alpha = 0.2) } +
+      labs(title = "Partial Dependence Plot",
            x = x_label, y = y_label) +
       theme_minimal()
 
@@ -563,67 +563,13 @@ plot.dynforestpdp <- function(x,
                     aes(x = .data[[x_var]], y = .data[[y_pdp]],
                         color = target_class, fill = target_class)) +
       geom_line(linewidth = 1)
-    if (conf_band && all(c("lower","upper") %in% colnames(pdp_df))) {
+    if (all(c("lower","upper") %in% colnames(pdp_df))) {
       p_PDP <- p_PDP +
         geom_ribbon(aes(ymin = lower, ymax = upper, group = target_class),
-                    alpha = alpha, color = NA)
+                    alpha = 0.2, color = NA)
     }
-    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
+    p_PDP <- p_PDP + labs(title = "Partial Dependence Plot",
                           x = x_label, y = y_label, color = "Class") +
-      theme_minimal()
-
-  } else if (model_type == "factor") {
-    df_mean <- pdp_df %>%
-      group_by(.data[[x_var]], target_class) %>%
-      summarise(mean_value = mean(pdp_value),
-                sd_value   = pdp_sd,
-                lower = mean(lower),
-                upper = mean(upper),
-                .groups = "drop")
-
-    w <- 0.3
-
-    p_PDP <- ggplot(df_mean, aes(x = .data[[x_var]], y = mean_value)) +
-      geom_point(size = 3) +
-      geom_errorbar(aes(ymin = mean_value - sd_value,
-                        ymax = mean_value + sd_value),
-                    width = w, color = "black") +
-      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
-                                       xend = as.numeric(.data[[x_var]]) + w,
-                                       y = lower, yend = lower),
-                                   linewidth = 0.7, alpha = 0.5) } +
-      { if(conf_band) geom_segment(aes(x = as.numeric(.data[[x_var]]) - w,
-                                       xend = as.numeric(.data[[x_var]]) + w,
-                                       y = upper, yend = upper),
-                                   linewidth = 0.7, alpha = 0.5) } +
-      facet_wrap(~target_class) +
-      labs(title = paste("PDP -", title),
-           x = x_label, y = y_label) +
-      theme_minimal()
-
-  } else if (model_type == "surv") {
-    pdp_mean <- pdp_df %>%
-      group_by(time, .data[[x_var]]) %>%
-      summarise(mean_value = mean(pdp_value),
-                lower_mean = if (conf_band) mean(lower) else NA,
-                upper_mean = if (conf_band) mean(upper) else NA,
-                .groups = "drop")
-
-    p_PDP <- ggplot(pdp_mean,
-                    aes(x = time, y = mean_value,
-                        color = .data[[x_var]], fill = .data[[x_var]])) +
-      geom_line(aes(group = .data[[x_var]]), linewidth = 1)
-    if (conf_band) {
-      p_PDP <- p_PDP +
-        geom_ribbon(
-          aes(ymin = lower_mean, ymax = upper_mean,
-              group = .data[[x_var]]),
-          alpha = alpha, color = NA
-        )
-    }
-    p_PDP <- p_PDP + labs(title = paste("PDP -", title),
-                          x = "Time", y = y_label,
-                          color = x_var, fill = x_var) +
       theme_minimal()
   }
 
