@@ -7,13 +7,13 @@
 compute_ooberror(dynforest_obj, IBS.min = 0, IBS.max = NULL, ncores = NULL)
 }
 \arguments{
-\item{dynforest_obj}{dynforest_obj \code{dynforest} object}
+\item{dynforest_obj}{A \code{dynforest} object}
 
-\item{IBS.min}{(Only with survival outcome) Minimal time to compute the Integrated Brier Score. Default value is set to 0.}
+\item{IBS.min}{(Survival only) Minimal time to compute Integrated Brier Score. Default is 0}
 
-\item{IBS.max}{(Only with survival outcome) Maximal time to compute the Integrated Brier Score. Default value is set to the maximal time-to-event found.}
+\item{IBS.max}{(Survival only) Maximal time to compute Integrated Brier Score. Default is maximal observed time}
 
-\item{ncores}{Number of cores used to grow trees in parallel. Default value is the number of cores of the computer-1.}
+\item{ncores}{Number of cores to use for parallel computation. Default: all cores minus 1}
 }
 \value{
 \code{compute_ooberror()} function return a list with the following elements:\tabular{ll}{

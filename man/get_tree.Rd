@@ -7,7 +7,7 @@
 get_tree(dynforest_obj, tree)
 }
 \arguments{
-\item{dynforest_obj}{dynforest_obj \code{dynforest} object}
+\item{dynforest_obj}{A \code{dynforest} object}
 
 \item{tree}{Integer indicating the tree identifier}
 }

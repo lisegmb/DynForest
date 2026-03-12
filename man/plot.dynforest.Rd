@@ -24,7 +24,7 @@
   x_label = NULL,
   y_label = NULL,
   title = "ICE and PDP Plot",
-  conf_band = FALSE,
+  conf_band = TRUE,
   alpha = 0.2,
   type = c("both", "ice", "pdp"),
   target_class = NULL,

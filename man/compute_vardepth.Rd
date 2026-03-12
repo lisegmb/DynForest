@@ -7,7 +7,7 @@
 compute_vardepth(dynforest_obj)
 }
 \arguments{
-\item{dynforest_obj}{dynforest_obj \code{dynforest} object}
+\item{dynforest_obj}{A \code{dynforest} object}
 }
 \value{
 compute_vardepth function return a list with the following elements:\tabular{ll}{

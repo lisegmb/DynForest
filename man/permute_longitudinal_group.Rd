@@ -10,8 +10,7 @@ permute_longitudinal_group(
   time_var,
   marker_indices,
   idA,
-  idB,
-  seed = NULL
+  idB
 )
 }
 \arguments{
