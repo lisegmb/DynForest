@@ -1,21 +1,33 @@
-#' Compute Out-Of-Bag error on the tree
+#' Compute Out-Of-Bag Prediction Error for a Tree
 #'
-#' @param tree Tree object resulting from \code{Rtmax_surv} function
-#' @param Longitudinal A list of longitudinal predictors which should contain: \code{X} a dataframe with one row for repeated measurement and as many columns as markers; \code{id} is the vector of the identifiers for the repeated measurements contained in \code{X}; \code{time} is the vector of the measurement times contained in \code{X}.
-#' @param Numeric A list of numeric predictors which should contain: \code{X} a dataframe with as many columns as numeric predictors; \code{id} is the vector of the identifiers for each individual.
-#' @param Factor A list of factor predictors which should contain: \code{X} a dataframe with as many columns as factor predictors; \code{id} is the vector of the identifiers for each individual.
-#' @param Y A list of output which should contain: \code{type} defines the nature of the outcome, can be "\code{surv}", "\code{numeric}" or "\code{factor}"; \code{Y} is the output variable; \code{id} is the vector of the identifiers for each individuals, they should be the same as the identifiers of the Inputs.
-#' @param timeVar A character indicating the name of time variable
-#' @param IBS.min (Only with survival outcome) Minimal time to compute the Integrated Brier Score. Default value is set to 0.
-#' @param IBS.max (Only with survival outcome) Maximal time to compute the Integrated Brier Score. Default value is set to the maximal time-to-event found.
-#' @param cause (Only with competing events) Number indicates the event of interest.
+#' This function computes the predictive performance of a single tree using
+#' the Out-Of-Bag (OOB) samples. For survival outcomes, it returns the
+#' Integrated Brier Score (IBS) across time, **weighted using Inverse
+#' Probability of Censoring (IPCW)** to account for censored observations.
+#' For numeric and factor outcomes, it computes the standard prediction error
+#' (mean squared error or misclassification rate).
 #'
-#' @import stringr
+#' @param tree A tree object resulting from the \code{Rtmax_surv} function.
+#' @param Longitudinal A list of longitudinal predictors with elements:
+#'   \code{X} (data frame of repeated measurements), \code{id} (vector of subject IDs),
+#'   \code{time} (measurement times), and optionally \code{model}.
+#' @param Numeric A list of numeric predictors with elements: \code{X} (data frame) and \code{id}.
+#' @param Factor A list of factor predictors with elements: \code{X} (data frame) and \code{id}.
+#' @param Y A list describing the outcome with elements: \code{type} ("surv", "numeric", or "factor"),
+#'   \code{Y} (outcome values), and \code{id} (subject identifiers matching input IDs).
+#' @param timeVar Character specifying the name of the time variable (if applicable).
+#' @param IBS.min Minimum time for computing IBS (only for survival outcomes, default 0).
+#' @param IBS.max Maximum time for computing IBS (only for survival outcomes, default = max observed time).
+#' @param cause Integer specifying the event of interest for competing risks (default 1).
+#'
+#' @return A numeric value representing the average OOB prediction error:
+#'   - Survival outcomes: Integrated Brier Score (IBS) using IPCW.
+#'   - Numeric outcomes: Mean squared error.
+#'   - Factor outcomes: Misclassification rate.
+#'
 #' @import pec
 #' @import prodlim
-#'
 #' @keywords internal
-#' @noRd
 #' @export
 OOB.tree <- function(tree, Longitudinal = NULL, Numeric = NULL, Factor = NULL, Y,
                      timeVar = NULL, IBS.min = 0, IBS.max = NULL, cause = 1){
