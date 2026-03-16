@@ -1,7 +1,13 @@
 ---
 title: "ICE and PDP in dynforest"
-output: html_document
-date: "2025-05-05"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ICE and PDP in dynforest}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+  author: "Lise Gamboa"
+date: "`r Sys.Date()`"
+description: "This vignette demonstrates how to compute and visualize ICE and PDP curves using dynforest models for survival, numeric, and categorical outcomes."
 ---
 
 ```{r setup, include=FALSE}
@@ -9,111 +15,103 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r packages, message=FALSE, include=FALSE}
-library(ranger)
-library(survival)
-library(iml)
-library(ggplot2)
-library(tidyverse)
-library(DynForest)
-library(pec)
-library(risksetROC)
-library(tidyr)
-library(fda)
-library(cluster)
-library(survex)
-library(fastshap)
-library(reshape2)
-library(tinytex)
-library(viridis)
-library(dynr)
-library(remotes)
-library(RColorBrewer)
-library(gridExtra)
-library(riskRegression)
+library(DynForest)   
+library(survival)    
+library(dplyr)       
+library(ggplot2)    
 
 ```
 
-
 ## 1) Individual Conditional Expectation (ICE)
 
-*Individual Conditional Expectation* (ICE) curves are a tool for local interpretation of machine learning models. Introduced by Goldstein et al., they allow for the visualization of how a given explanatory variable affects a model's prediction for each individual, while holding all other variables constant.
+*Individual Conditional Expectation* (ICE) curves are a local interpretation tool for machine learning models. They visualize how a given explanatory variable affects a model’s prediction for each individual, while keeping all other variables constant.
 
 #### Principle
 
-Let $\hat{f}(\cdot)$ be a survival model that predicts a survival or risk function for each individual over time $t$.  
-For a given observation $i$, the feature vector is denoted as:  
-$\mathbf{x}_i = (\mathbf{x}_{i,A}, \mathbf{x}_{i,-A})$, where:
+Let \(\hat{f}(\cdot)\) be a survival model predicting a survival or risk function for each individual over time \(t\).  
+For a given individual \(i\), the feature vector is:
 
-- $A$ is the index of the variable of interest;  
-- $\mathbf{x}_{i,A}$ is the value of this variable for individual $i$;  
-- $\mathbf{x}_{i,-A}$ represents the other variables.
+\[
+\mathbf{x}_i = (\mathbf{x}_{i,A}, \mathbf{x}_{i,-A})
+\]
 
-The idea of ICE curves is to vary $\mathbf{x}_A$ over a grid of values while keeping $\mathbf{x}_{i,-A}$ constant, and to observe how the prediction $\hat{f}(t \mid \mathbf{x}_A, \mathbf{x}_{i,-A})$ changes over time.
+where:  
 
-#### Curve Construction
+- \(A\) is the index of the variable of interest;  
+- \(\mathbf{x}_{i,A}\) is the value of this variable for individual \(i\);  
+- \(\mathbf{x}_{i,-A}\) represents all other variables.
 
-The grid of values for the variable $\mathbf{x}_A$ can be chosen in various ways:
+ICE curves are constructed by varying \(\mathbf{x}_A\) over a grid of values while keeping \(\mathbf{x}_{i,-A}\) fixed, and observing how the prediction
 
-- Equidistant values within the range of the data;  
+\[
+\hat{f}(t \mid \mathbf{x}_A, \mathbf{x}_{i,-A})
+\]
+
+changes over time.
+
+#### Grid Construction
+
+The grid of values for \(\mathbf{x}_A\) can be defined in several ways:
+
+- Equally spaced values within the observed range;  
 - Observed values from the sample;  
-- Quantiles of the distribution of $\mathbf{x}_A$ (preserving its marginal distribution).
+- Quantiles of the variable’s distribution (preserving its marginal distribution).
 
-If the variable is binary or categorical, the grid corresponds to its distinct levels.
+For binary or categorical variables, the grid corresponds to the distinct observed levels.
 
 ---
 
 ## 2) Partial Dependence Plots (PDP)
 
-*Partial Dependence Plots* (PDPs) are a global interpretation tool that shows the average marginal effect of one or more features on a model’s prediction. Unlike ICE curves, which are specific to each individual, PDPs provide an aggregated view by averaging the individual effects.
+*Partial Dependence Plots* (PDPs) are a global interpretation tool. Unlike ICE curves, which are individual-specific, PDPs show the average effect of one or more variables on the model’s prediction by aggregating across individuals.
 
 #### Principle
 
-Let $\hat{f}(t \mid \mathbf{x})$ be the prediction of a survival model at time $t$.  
-To evaluate the effect of a variable $A$, we vary its value over a grid, while keeping all other variables fixed at their observed values.
-
-The partial dependence function is defined as the average of the predictions obtained by replacing variable $A$ with the values from the grid, keeping the rest constant:
+For a variable \(A\), the partial dependence function is defined as the average of predictions obtained by replacing \(\mathbf{x}_A\) with values from a grid while keeping the other variables \(\mathbf{X}_{-A}\) fixed at their observed values:
 
 \[
-f_{\text{PDP},A}(\mathbf{t}^{\text{ord}} \mid \mathbf{x}_A) = \mathbb{E}_{\mathbf{X}_{-A}} \left[ \hat{f}(\mathbf{t}^{\text{ord}} \mid \mathbf{x}_A, \mathbf{X}_{-A}) \right].
+f_{\text{PDP},A}(t \mid x_A) = \mathbb{E}_{\mathbf{X}_{-A}}\left[ \hat{f}(t \mid x_A, \mathbf{X}_{-A}) \right].
 \]
 
 #### Empirical Estimation
 
-In practice, we estimate this function using the training sample. For a grid of values $\{x^1_A, \dots, x^g_A\}$, the empirical approximation is:
+In practice, with a sample of size \(n\) and a grid \(\{x_A^1, \dots, x_A^g\}\), the empirical approximation is:
 
 \[
-\hat{f}_{\text{PDP},A}(\mathbf{t}^{\text{ord}} \mid x^k_A) = \frac{1}{n} \sum_{i=1}^n \hat{f}(\mathbf{t}^{\text{ord}} \mid x^k_A, \mathbf{x}^{(i)}_{-A}).
+\hat{f}_{\text{PDP},A}(t \mid x_A^k) = \frac{1}{n} \sum_{i=1}^n \hat{f}(t \mid x_A^k, \mathbf{x}^{(i)}_{-A}).
 \]
 
-#### Relationship to ICE Curves
+#### Relationship with ICE
 
-PDPs are simply the average of the ICE curves over all individuals:
+PDPs are simply the average of the ICE curves:
 
 \[
-\hat{f}_{\text{PDP},A}(\mathbf{t}^{\text{ord}} \mid x^k_A) = \frac{1}{n} \sum_{i=1}^n \hat{f}^{\text{ICE}}_i(\mathbf{t}^{\text{ord}} \mid x^k_A).
+\hat{f}_{\text{PDP},A}(t \mid x_A^k) = \frac{1}{n} \sum_{i=1}^n \hat{f}^{\text{ICE}}_i(t \mid x_A^k).
 \]
 
-They help to detect average trends, while ICE curves reveal individual heterogeneity or potential interactions.
+Thus, PDPs reveal the average trend, while ICE curves highlight individual heterogeneity and potential interactions.
 
-
-
-# Description
-
-The `compute_ice_pdp()` function is designed to compute data necessary for generating ICE (Individual Conditional Expectation) and PDP (Partial Dependence Plot) curves for a given variable in a dynamic prediction model built with `dynforest`.  
-It works with fixed covariates (e.g., baseline characteristics), categorical or continuous variables, as well as longitudinal (time-dependent) variables.
-
-# Usage
+# compute_ice_pdp() 
 
 ```r
-compute_ice_pdp <- function(timeData = NULL, fixedData = NULL, model, var_name,
-                            values = NULL, timeVar = NULL, idVar = NULL, t0 = NULL,
-                            target_class = NULL,
-                            grid_type = c("regular", "observed", "quantile"),
-                            grid_size = 50,
-                            ncores = 1)
+compute_ice_pdp(
+  timeData = NULL,
+  fixedData = NULL,
+  model,
+  var_name,
+  values = NULL,
+  timeVar = NULL,
+  idVar = NULL,
+  t0 = NULL,
+  target_class = NULL,
+  grid_type = c("regular", "observed", "quantile"),
+  grid_size = 50,
+  ncores = 1,
+  conf_level = 0.95
+)
 ```
 
-# Arguments
+## Arguments
 
 **`timeData`** *(optional)*  
 A data frame containing the ID variable, the time variable, and all time-varying covariates.  
@@ -142,10 +140,10 @@ Interpretation depends on the variable type:
 - **Categorical**  
   - A vector of factor levels to evaluate.  
   - Defaults to all observed levels.  
-
+  
 - **Longitudinal**  
-  - A **named list of functions**, each generating a transformed trajectory.  
-  - Each function receives a vector of time points and returns corresponding values.
+  - A **named list of functions**, each applied to a subject's trajectory.  
+  - Each name will appear in the **`transformation`** column of the output ICE/PDP.
 
 **`timeVar`** *(optional)*  
 Name of the time column in `timeData`.  
@@ -174,59 +172,101 @@ Number of points in the grid when generating numeric values (used when `grid_typ
 Number of CPU cores to use for parallel computations.  
 Defaults to 1.
 
+**`conf_level`** *(optional)*  
+Confidence level for PDP intervals. Defaults to 0.95
 
-# Value
+## Value
 
-Returns a `data.frame` in long format containing the results needed for ICE/PDP plotting.  
+Returns a `dynforestpdp` object, which is a **list** containing the data needed for ICE/PDP plotting.  
 The output includes:
 
-- **`time`** *(only for a survival forest)*: time points at which predictions are computed  
-- **`value`**: predicted probabilities (e.g., CIF) or values 
-- **`replicate_id`**: index of the value or trajectory tested  
-- **`id`**: individual identifier  
-- **`target class`** *(only for a classification model)*: the class at which predicted probability are computed 
-- **`transformation`** *(only for longitudinal variables)*: label of the function used for the simulated trajectory  
-- The tested value of `var_name` *(for numeric or categorical variables)*
+- **`ice`**: a `data.frame` of individual conditional expectation (ICE) values with columns:  
+  - **`time`** *(only for survival models)*: time points at which predictions are computed  
+  - **`ice_value`**: predicted probabilities (e.g., CIF) or predicted values  
+  - **`replicate_id`**: index of the value or trajectory tested  
+  - **`id`**: individual identifier  
+  - **`target_class`** *(only for classification models)*: class at which predicted probability is computed  
+  - **`transformation`** *(only for longitudinal variables)*: label of the function applied to the trajectory  
+  - The tested value of **`var_name`** *(for numeric or categorical variables)*
 
-This output can be directly passed to a plotting function (e.g., `plot.dynforestpdp`) to visualize ICE and PDP curves.
+- **`pdp`**: a `data.frame` of partial dependence plot values with columns:  
+  - **`pdp_value`**: mean of ICE values per group  
+  - **`pdp_sd`**: standard deviation of ICE values per group  
+  - **`lower`** / **`upper`**: confidence interval bounds  
+  - **`time`**, **`var_name`**, **`transformation`**, **`target_class`** when relevant
+
+- **`model_type`**: type of the model (`"surv"`, `"numeric"`, or `"factor"`)  
+- **`var_type`**: type of the predictor (`"numeric"`, `"factor"`, or `"longitudinal"`)  
+- **`grid`**: a list containing:  
+  - **`grid_type`**: the type of grid used (`"regular"`, `"observed"`, `"quantile"`, or `"manual"`)  
+  - **`grid_size`**: number of values evaluated
+
+This output can be passed directly to plotting functions like `plot.dynforestpdp()` to visualize ICE and PDP curves.
+
+# plot.dynforestpdp()
+
+```r
+plot(
+  x         = res_surv_age_test,   # dynforestpdp object
+  type      = "both",
+  conf_band = TRUE
+)
+```
+## Arguments
+
+**`x`**  
+A `dynforestpdp` object returned by `compute_ice_pdp()`.
+
+**`type`** *(optional)*  
+Which curves to plot: `"ice"` (individual curves), `"pdp"` (average curve), or `"both"`.  
+Defaults to `"both"`.
+
+**`conf_band`** *(optional)*  
+Logical. If `TRUE`, displays confidence bands for the PDP.  
+Currently, the confidence bands are computed using the standard deviation of the ICE curves and a normal approximation.  
+**Note:** This method is under evaluation; we are still assessing whether the coverage is sufficient and whether the calculation method should be adjusted in future versions.  
+Defaults to `FALSE`.
+
+**`...`**  
+Additional graphical parameters (e.g., `main`, `col`, `lwd`).
+
+## Value
+
+Generates a plot of ICE curves, PDP, or both.
+
+- For **survival models**, the x-axis represents time.  
+- For **numeric or categorical models**, the x-axis represents the values of the variable.  
+- Confidence bands are displayed if `conf_band = TRUE`.
 
 
+# Examples
 
-```{r models, include = FALSE }
+The examples shown above were performed on three DynForest models using longitudinal data: a survival forest trained on the pbc2 dataset to predict mortality, a classification forest also trained on pbc2, and a regression forest trained on a simulated dataset.
+
+## Training the three forests 
+
+```{r train_models_example, eval=FALSE, echo=TRUE}
 
 set.seed(1234)
-
-# Utility function to load existing model or train new one
-load_or_train <- function(filename, train_func) {
-  if (file.exists(filename)) {
-    message(paste("Loading existing model:", filename))
-    readRDS(filename)
-  } else {
-    message(paste("Training new model:", filename))
-    model <- train_func()
-    saveRDS(model, file = filename)
-    model
-  }
-}
 
 # ============================================================
 # 1. Survival model (pbc2 dataset)
 # ============================================================
 data(pbc2)
 
-# Split IDs for train/test
-all_ids <- unique(pbc2$id)
-train_ids <- sample(all_ids, length(all_ids) * 2/3)
-test_ids  <- setdiff(all_ids, train_ids)
+# Split training/test
+train_ids <- sample(unique(pbc2$id), length(unique(pbc2$id)) * 2/3)
+test_ids  <- setdiff(unique(pbc2$id), train_ids)
 
 # Training data
 pbc2_train <- pbc2 %>% filter(id %in% train_ids)
 timeData_train <- pbc2_train[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
 fixedData_train <- unique(pbc2_train[, c("id", "age", "drug", "sex")])
+Y_surv <- list(type = "surv", Y = unique(pbc2_train[, c("id", "years", "event")]))
 
 # Test data
 pbc2_test <- pbc2 %>% filter(id %in% test_ids)
-timeData_test <- pbc2_test[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
+timeData_test  <- pbc2_test[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
 fixedData_test <- unique(pbc2_test[, c("id", "age", "drug", "sex")])
 
 # Longitudinal variable models
@@ -237,61 +277,70 @@ timeVarModel_surv <- list(
   alkaline = list(fixed = alkaline ~ time, random = ~ time)
 )
 
-# Outcome
-Y_surv <- list(type = "surv", Y = unique(pbc2_train[, c("id", "years", "event")]))
-
-# Train/load model
-res_surv <- load_or_train("res_surv.rds", function() {
-  dynforest(
-    timeData = timeData_train,
-    fixedData = fixedData_train,
-    timeVar = "time", idVar = "id",
-    timeVarModel = timeVarModel_surv,
-    Y = Y_surv,
-    ntree = 50, nodesize = 2, minsplit = 3,
-    cause = 2, ncores = 7, seed = 1234
-  )
-})
+# Train survival model
+res_surv <- dynforest(
+  timeData = timeData_train,
+  fixedData = fixedData_train,
+  timeVar = "time", idVar = "id",
+  timeVarModel = timeVarModel_surv,
+  Y = Y_surv,
+  ntree = 50, nodesize = 2, minsplit = 3,
+  cause = 2, ncores = 4, seed = 1234
+)
 
 # ============================================================
 # 2. Numeric model (simulated data)
 # ============================================================
 data(data_simu1)
 
-# Longitudinal data
-timeData_num <- data_simu1[, c("id", "time", paste0("marker", 1:6))]
+# Split training/test
+train_ids_num <- sample(unique(data_simu1$id), length(unique(data_simu1$id)) * 2/3)
+test_ids_num  <- setdiff(unique(data_simu1$id), train_ids_num)
+
+# Training data
+data_num_train <- data_simu1 %>% filter(id %in% train_ids_num)
+timeData_num_train <- data_num_train[, c("id", "time", paste0("marker", 1:6))]
+fixedData_num_train <- unique(data_num_train[, c("id", "cont_covar1", "cont_covar2", "bin_covar1", "bin_covar2")])
+Y_num_train <- list(type = "numeric", Y = unique(data_num_train[, c("id", "Y_res")]))
+
+# Test data
+data_num_test <- data_simu1 %>% filter(id %in% test_ids_num)
+timeData_num_test <- data_num_test[, c("id", "time", paste0("marker", 1:6))]
+fixedData_num_test <- unique(data_num_test[, c("id", "cont_covar1", "cont_covar2", "bin_covar1", "bin_covar2")])
+
+# Longitudinal variable models
 timeVarModel_num <- setNames(
   lapply(paste0("marker", 1:6), function(x) {
-    list(fixed = reformulate(termlabels = "time", response = x), random = ~ time)
+    list(fixed = reformulate("time", response = x), random = ~ time)
   }),
   paste0("marker", 1:6)
 )
 
-# Fixed covariates
-fixedData_num <- unique(data_simu1[, c("id", "cont_covar1", "cont_covar2", "bin_covar1", "bin_covar2")])
-
-# Outcome
-Y_num <- list(type = "numeric", Y = unique(data_simu1[, c("id", "Y_res")]))
-
-# Train/load model
-res_num <- load_or_train("res_num.rds", function() {
-  dynforest(
-    timeData = timeData_num,
-    fixedData = fixedData_num,
-    timeVar = "time", idVar = "id",
-    timeVarModel = timeVarModel_num,
-    Y = Y_num,
-    ncores = 7, seed = 1234, ntree = 50
-  )
-})
+# Train numeric model
+res_num <- dynforest(
+  timeData = timeData_num_train,
+  fixedData = fixedData_num_train,
+  timeVar = "time", idVar = "id",
+  timeVarModel = timeVarModel_num,
+  Y = Y_num_train,
+  ncores = 4, seed = 1234, ntree = 50
+)
 
 # ============================================================
 # 3. Categorical model (based on pbc2)
 # ============================================================
 # Training data
 pbc2_cat_train <- pbc2 %>% filter(id %in% train_ids)
-timeData_cat <- pbc2_cat_train[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
-fixedData_cat <- unique(pbc2_cat_train[, c("id", "age", "drug", "sex")])
+timeData_cat_train <- pbc2_cat_train[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
+fixedData_cat_train <- unique(pbc2_cat_train[, c("id", "age", "drug", "sex")])
+Y_cat_train <- unique(pbc2_cat_train[, c("id", "event")])
+Y_cat_train$event <- factor(Y_cat_train$event, levels = c(0,1,2))
+Y_cat_list <- list(type = "factor", Y = Y_cat_train)
+
+# Test data
+pbc2_cat_test <- pbc2 %>% filter(id %in% test_ids)
+timeData_cat_test <- pbc2_cat_test[, c("id", "time", "serBilir", "SGOT", "albumin", "alkaline")]
+fixedData_cat_test <- unique(pbc2_cat_test[, c("id", "age", "drug", "sex")])
 
 # Longitudinal variable models
 timeVarModel_cat <- list(
@@ -301,311 +350,15 @@ timeVarModel_cat <- list(
   alkaline = list(fixed = alkaline ~ time, random = ~ time)
 )
 
-# Outcome
-Y_cat <- unique(pbc2_cat_train[, c("id", "event")])
-Y_cat$event <- factor(Y_cat$event, levels = c(0, 1, 2))
-Y_cat_list <- list(type = "factor", Y = Y_cat)
-
-# Train/load model
-res_cat <- load_or_train("res_cat.rds", function() {
-  dynforest(
-    timeData = timeData_cat,
-    fixedData = fixedData_cat,
-    timeVar = "time", idVar = "id",
-    timeVarModel = timeVarModel_cat,
-    Y = Y_cat_list,
-    ncores = 7, seed = 1234, ntree = 50
-  )
-})
-
-
-```
-
-
-# Examples
-
-The examples shown above were performed on three DynForest models using longitudinal data: a survival forest trained on the pbc2 dataset to predict mortality, a classification forest also trained on pbc2, and a regression forest trained on a simulated dataset.
-
-
-
-```{r save tests, include = FALSE}
-# ============================================================
-# GENERAL PARAMETERS
-# ============================================================
-grid_size    <- 20
-ncores       <- 20
-target_class <- "2"
-grid_types   <- c("regular", "observed", "quantile")
-
-# ============================================================
-# UTILITY FUNCTIONS
-# ============================================================
-compute_save <- function(filename, expr) {
-  if (file.exists(filename)) {
-    readRDS(filename)
-  } else {
-    result <- eval(expr)
-    saveRDS(result, file = filename)
-    result
-  }
-}
-
-# Example: survival test comparing age 30 vs 70
-age_test_values <- c(30, 70)
-
-# ============================================================
-# SURVIVAL MODEL
-# ============================================================
-res_surv_age_test <- compute_save("res_surv_age_test_pdp.rds", quote(
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "age",
-    values    = age_test_values,
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-))
-
-res_surv_drug <- compute_save("res_surv_drug_pdp.rds", quote(
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "drug",
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-))
-
-serBilir_funcs <- list(
-  slow   = function(x) { 3 + (x - x[1]) * 0.5 },
-  medium = function(x) { 3 + (x - x[1]) * 1.0 },
-  fast   = function(x) { 3 + (x - x[1]) * 2.0 }
+# Train categorical model
+res_cat <- dynforest(
+  timeData = timeData_cat_train,
+  fixedData = fixedData_cat_train,
+  timeVar = "time", idVar = "id",
+  timeVarModel = timeVarModel_cat,
+  Y = Y_cat_list,
+  ncores = 4, seed = 1234, ntree = 50
 )
-
-res_surv_serBilir <- compute_save("res_surv_serBilir_pdp.rds", quote(
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "serBilir",
-    values    = serBilir_funcs,
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-))
-
-# ============================================================
-# GENERAL PARAMETERS
-# ============================================================
-grid_size    <- 20
-ncores       <- 20
-target_class <- "2"
-grid_types   <- c("regular", "observed", "quantile")
-
-# ============================================================
-# UTILITY FUNCTION
-# ============================================================
-compute_save <- function(filename, expr) {
-  if (file.exists(filename)) {
-    readRDS(filename)
-  } else {
-    result <- expr
-    saveRDS(result, file = filename)
-    result
-  }
-}
-
-# Example: survival test comparing age 30 vs 70
-age_test_values <- c(30, 70)
-
-# ============================================================
-# SURVIVAL MODEL
-# ============================================================
-res_surv_age_test <- compute_save("res_surv_age_test_pdp.rds", 
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "age",
-    values    = age_test_values,
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-)
-
-res_surv_drug <- compute_save("res_surv_drug_pdp.rds", 
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "drug",
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-)
-
-serBilir_funcs <- list(
-  slow   = function(x) { 3 + (x - x[1]) * 0.5 },
-  medium = function(x) { 3 + (x - x[1]) * 1.0 },
-  fast   = function(x) { 3 + (x - x[1]) * 2.0 }
-)
-
-res_surv_serBilir <- compute_save("res_surv_serBilir_pdp.rds", 
-  compute_ice_pdp(
-    model     = res_surv,
-    var_name  = "serBilir",
-    values    = serBilir_funcs,
-    timeData  = timeData_test,
-    fixedData = fixedData_test,
-    timeVar   = "time",
-    idVar     = "id",
-    ncores    = ncores
-  )
-)
-
-# ============================================================
-# NUMERIC MODEL
-# ============================================================
-res_num_cont1_list <- lapply(grid_types, function(gt) {
-  compute_save(paste0("res_num_cont1_", gt, "_pdp.rds"), 
-    compute_ice_pdp(
-      model     = res_num,
-      var_name  = "cont_covar1",
-      grid_type = gt,
-      grid_size = grid_size,
-      ncores    = ncores
-    )
-  )
-})
-names(res_num_cont1_list) <- grid_types
-
-res_num_bin1 <- compute_save("res_num_bin1_pdp.rds", 
-  compute_ice_pdp(
-    model    = res_num,
-    var_name = "bin_covar1",
-    ncores   = ncores
-  )
-)
-
-marker1_funcs <- list(
-  slow   = function(t) { 5 - 2 * t },
-  medium = function(t) { 5 - 3 * t },
-  fast   = function(t) { 5 - 4 * t }
-)
-
-res_num_marker1 <- compute_save("res_num_marker1_pdp.rds", 
-  compute_ice_pdp(
-    model    = res_num,
-    var_name = "marker1",
-    values   = marker1_funcs,
-    ncores   = ncores
-  )
-)
-
-# ============================================================
-# CATEGORICAL MODEL
-# ============================================================
-res_cat_age_list <- lapply(grid_types, function(gt) {
-  compute_save(paste0("res_cat_age_", gt, "_pdp.rds"), 
-    compute_ice_pdp(
-      model     = res_cat,
-      var_name  = "age",
-      grid_type = gt,
-      grid_size = grid_size,
-      ncores    = ncores
-    )
-  )
-})
-names(res_cat_age_list) <- grid_types
-
-res_cat_sex <- compute_save("res_cat_sex_pdp.rds", 
-  compute_ice_pdp(
-    model        = res_cat,
-    var_name     = "sex",
-    target_class = target_class,
-    ncores       = ncores
-  )
-)
-
-res_cat_drug <- compute_save("res_cat_drug_pdp.rds", 
-  compute_ice_pdp(
-    model     = res_cat,
-    var_name  = "drug",
-    ncores    = ncores
-  )
-)
-
-albumin_funcs <- list(
-  constant = function(t) { rep(3.5, length(t)) },
-  slow     = function(t) { 3.5 - 0.5 * t },
-  fast     = function(t) { 3.5 - 1 * t }
-)
-
-res_cat_albumin <- compute_save("res_cat_albumin_pdp.rds", 
-  compute_ice_pdp(
-    model        = res_cat,
-    var_name     = "albumin",
-    values       = albumin_funcs,
-    target_class = target_class,
-    ncores       = ncores
-  )
-)
-
-```
-```{r, include=FALSE}
-res_surv <- readRDS("res_surv.rds")
-
-res_surv_age_test <- readRDS("res_surv_age_test_pdp.rds")
-res_surv_drug     <- readRDS("res_surv_drug_pdp.rds")
-res_surv_serBilir <- readRDS("res_surv_serBilir_pdp.rds")
-
-res_num <- readRDS("res_num.rds")
-
-res_num_cont1_regular <- readRDS("res_num_cont1_regular_pdp.rds")
-res_num_bin1          <- readRDS("res_num_bin1_pdp.rds")
-res_num_marker1       <- readRDS("res_num_marker1_pdp.rds")
-
-res_cat <- readRDS("res_cat.rds")
-
-res_cat_age_observed <- readRDS("res_cat_age_observed_pdp.rds")
-res_cat_drug         <- readRDS("res_cat_drug_pdp.rds")
-res_cat_albumin      <- readRDS("res_cat_albumin_pdp.rds")
-
-```
-
-```{r save plots, include = FALSE}
-dir.create("plots_ice_pdp", showWarnings = FALSE)
-
-save_ice_pdp <- function(res_obj, name, conf_band = FALSE) {
-  p_ice <- plot(res_obj, type = "ice", conf_band = conf_band)
-  ggsave(filename = paste0("plots_ice_pdp/", name, "_ICE.png"),
-         plot = p_ice, width = 6, height = 4)
-  
-  p_pdp <- plot(res_obj, type = "pdp", conf_band = conf_band)
-  ggsave(filename = paste0("plots_ice_pdp/", name, "_PDP.png"),
-         plot = p_pdp, width = 6, height = 4)
-}
-
-save_ice_pdp(res_surv_age_test, "surv_age_test", conf_band = TRUE)
-save_ice_pdp(res_surv_drug, "surv_drug")
-save_ice_pdp(res_surv_serBilir, "surv_serBilir")
-
-save_ice_pdp(res_num_cont1_regular, "num_cont1_regular", conf_band = TRUE)
-save_ice_pdp(res_num_bin1, "num_bin1", conf_band = TRUE)
-save_ice_pdp(res_num_marker1, "num_marker1", conf_band = TRUE)
-
-save_ice_pdp(res_cat_age_observed, "cat_age_observed", conf_band = TRUE)
-save_ice_pdp(res_cat_drug, "cat_drug")
-save_ice_pdp(res_cat_albumin, "cat_albumin")
-
 
 ```
 
@@ -629,7 +382,7 @@ plot(res_surv_age_test, type = "both", conf_band = TRUE)
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/surv_age_test_ICE.png")
 knitr::include_graphics("plots_ice_pdp/surv_age_test_PDP.png")
 
@@ -645,17 +398,18 @@ res_surv_drug_test <- compute_ice_pdp(
     fixedData = fixedData_test,
     timeVar   = "time",
     idVar     = "id",
-    ncores    = ncores
+    ncores    = 4
   )
 plot(res_surv, type = "both")
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/surv_drug_ICE.png")
 knitr::include_graphics("plots_ice_pdp/surv_drug_PDP.png")
 
 ```
+
 ```{r, eval=FALSE, echo=TRUE}
 
 # Example: Compute ICE/PDP for the marker serBilir in order to compare when this marker increase at varying speeds
@@ -667,13 +421,13 @@ res_surv_serBilir_test <- compute_ice_pdp(
     fixedData = fixedData_test,
     timeVar   = "time",
     idVar     = "id",
-    ncores    = ncores
+    ncores    = 4
   )
 plot(res_surv_serBilir_test, type = "both")
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/surv_serBilir_ICE.png")
 knitr::include_graphics("plots_ice_pdp/surv_serBilir_PDP.png")
 
@@ -693,7 +447,7 @@ plot(res_num_cont1_regular, type = "both", conf_band = TRUE)
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/num_cont1_regular_ICE.png")
 knitr::include_graphics("plots_ice_pdp/num_cont1_regular_PDP.png")
 
@@ -710,7 +464,7 @@ plot(res_num_bin1, type = "both", conf_band = TRUE)
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/num_bin1_ICE.png")
 knitr::include_graphics("plots_ice_pdp/num_bin1_PDP.png")
 
@@ -724,27 +478,27 @@ plot(res_num_marker1, type = "both", conf_band = TRUE)
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/num_marker1_ICE.png")
 knitr::include_graphics("plots_ice_pdp/num_marker1_PDP.png")
 
 ```
 
 
-##Examples for a classification model
+## Examples for a classification model
 
 
 ```{r, eval=FALSE, echo=TRUE}
 res_cat_age_observed <- compute_ice_pdp(
     model     = res_cat,
-    var_name = "age"
+    var_name = "age",
     grid_type = "observed"
   )
 plot(res_cat_age_observed, type = "both", conf_band = TRUE)
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/cat_age_observed_ICE.png")
 knitr::include_graphics("plots_ice_pdp/cat_age_observed_PDP.png")
 
@@ -759,7 +513,7 @@ plot(res_cat_drug, type = "both")
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/cat_drug_ICE.png")
 knitr::include_graphics("plots_ice_pdp/cat_drug_PDP.png")
 
@@ -782,7 +536,7 @@ plot(res_cat_albumin, type = "both")
 
 ```
 
-```{r, echo=FALSE, out.width="49%", fig.show='hold'}
+```{r, echo=FALSE, out.width="45%"}
 knitr::include_graphics("plots_ice_pdp/cat_albumin_ICE.png")
 knitr::include_graphics("plots_ice_pdp/cat_albumin_PDP.png")
 

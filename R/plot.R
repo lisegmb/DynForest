@@ -95,7 +95,7 @@
 #' plot(x = res_varDepth, plot_level = "feature")
 #'
 #' # Compute VIMP statistic
-#' res_dyn_VIMP <- compute_vimp(dynforest_obj = res_dyn, ncores = 2)
+#' res_dyn_VIMP <- compute_vimp(dynforest_obj = res_dyn, ncores = 1)
 #'
 #' # Plot VIMP
 #' plot(x = res_dyn_VIMP, PCT = TRUE)
@@ -104,7 +104,7 @@
 #' res_dyn_gVIMP <- compute_gvimp(dynforest_obj = res_dyn,
 #'                                group = list(group1 = c("serBilir","SGOT"),
 #'                                             group2 = c("albumin","alkaline")),
-#'                                ncores = 2)
+#'                                ncores = 1)
 #'
 #' # Plot gVIMP
 #' plot(x = res_dyn_gVIMP, PCT = TRUE)

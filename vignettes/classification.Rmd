@@ -183,6 +183,8 @@ To further investigate the effect of predictors on the predicted outcome, the `c
 
 Using an object returned by `compute_ice_pdp()`, the `plot()` function allows to visualize both ICE and PDP curves. The `type` argument defines whether ICE or PDP curves are displayed (or both).
 
+Optionally, the `plot()` function can display confidence bands around the PDP curve. These bands are computed from the empirical variability of the Individual Conditional Expectation (ICE) curves. For each value of the predictor, the PDP corresponds to the mean of the ICE values across individuals, and pointwise confidence intervals are constructed using a Student approximation based on the standard error of this mean. Ongoing work is currently investigating whether these bands provide adequate statistical coverage of the true underlying partial dependence function.
+
 ```{r, eval=FALSE, echo=TRUE}
 res_cat_age <- compute_ice_pdp(
     model     = res_dyn,

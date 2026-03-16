@@ -2,59 +2,24 @@
 #'
 #' Compute Individual Conditional Expectation (ICE) and Partial Dependence Plot (PDP)
 #' values for a specified predictor from a fitted \code{dynforest} model.
-#' The function supports numeric, categorical, and longitudinal predictors. It can
-#' reconstruct \code{timeData} and \code{fixedData} from the model object if they are not provided,
-#' and attempts to auto-detect \code{idVar} and \code{timeVar} when not specified.
+#' Supports numeric, categorical, and longitudinal predictors.
 #'
-#' @param timeData Optional \code{data.frame} with the subject ID, time variable, and time-dependent predictors.
-#'                 If \code{NULL}, the function attempts to reconstruct it from \code{model$data$Longitudinal}.
-#' @param fixedData Optional \code{data.frame} with the subject ID and time-fixed predictors (numeric or factor).
-#'                  If \code{NULL}, it is reconstructed from \code{model$data$Factor} and \code{model$data$Numeric}.
-#' @param model A fitted \code{dynforest} object (result of \code{dynforest()}).
-#' @param var_name Character. Name of the predictor variable for which ICE/PDP are computed.
-#' @param values For numeric predictors: a numeric vector of values to evaluate.
-#'               For categorical predictors: a vector of factor levels (defaults to all observed levels).
-#'               For longitudinal predictors: a **named list of functions** to summarize each subject's trajectory (required).
-#' @param target_class Optional vector of classes to retain (used for classification models only).
-#' @param grid_type Character. Type of grid for numeric variables (\code{"regular"}, \code{"observed"}, or \code{"quantile"}).
-#' @param grid_size Integer. Number of points in the grid if \code{values} is not provided.
-#' @param idVar Optional character. Name of the subject identifier variable. Auto-detected if \code{NULL}.
-#' @param timeVar Optional character. Name of the time variable. Defaults to \code{model$timeVar} or \code{"time"}.
-#' @param t0 Optional numeric. Landmark time for dynamic prediction; if \code{NULL}, predictions use all available information from time 0.
-#' @param ncores Integer. Number of cores to use for parallel computation. Defaults to 1.
-#' @param conf_level Numeric between 0 and 1. Confidence level for PDP intervals. Defaults to 0.95.
+#' @param timeData Optional data.frame with subject ID, time variable, and longitudinal predictors.
+#' @param fixedData Optional data.frame with subject ID and fixed predictors.
+#' @param model A fitted \code{dynforest} object.
+#' @param var_name Name of the predictor variable for ICE/PDP.
+#' @param values Numeric vector, factor levels, or named list of functions for longitudinal.
+#' @param target_class Classes to retain for classification.
+#' @param grid_type Grid type for numeric predictors: "regular", "observed", "quantile".
+#' @param grid_size Number of points in grid.
+#' @param idVar Subject ID variable (auto-detected if NULL).
+#' @param timeVar Time variable (defaults to model$timeVar or "time").
+#' @param t0 Landmark time for dynamic prediction.
+#' @param ncores Number of cores for parallel computation.
+#' @param conf_level Confidence level for PDP intervals.
 #'
-#' @return An object of class \code{dynforestpdp}, which is a list containing:
-#' \describe{
-#'   \item{\code{ice}}{A \code{data.frame} of individual conditional expectation (ICE) values with columns such as
-#'        \code{id}, \code{replicate_id}, \code{time}, \code{ice_value}, \code{transformation} (for longitudinal predictors),
-#'        \code{var_name} (for fixed predictors), and \code{target_class} (for classification models).}
-#'   \item{\code{pdp}}{A \code{data.frame} of partial dependence plot (PDP) values with columns
-#'        \code{pdp_value}, \code{pdp_sd}, \code{lower}, \code{upper}, and optionally \code{time},
-#'        \code{target_class}, or \code{transformation}.}
-#'   \item{\code{model_type}}{Type of the model: \code{"numeric"}, \code{"factor"}, or \code{"surv"}.}
-#'   \item{\code{var_type}}{Type of the predictor variable: \code{"numeric"}, \code{"factor"}, or \code{"longitudinal"}.}
-#'   \item{\code{grid}}{A list containing \code{grid_type} and \code{grid_size} used for ICE/PDP computation.}
-#' }
-#'
-#' @details
-#' The function automatically handles three model types:
-#' \itemize{
-#'   \item \strong{surv} - longitudinal survival predictions (requires \code{id}, \code{time}, \code{ice_value}).
-#'   \item \strong{factor} - classification with \code{target_class}.
-#'   \item \strong{numeric} - regression.
-#' }
-#' For longitudinal predictors, \code{values} must be a named list of summary/transformation functions
-#' (e.g., \code{list(mean = mean, slope = function(x) coef(lm(x ~ time))[2])}).
-#'
-#' @seealso \code{\link{dynforest}}, \code{\link{plot.dynforestpdp}} for plotting ICE/PDP curves.
-#'
-#' @importFrom dplyr bind_rows mutate select full_join group_by summarise
-#' @importFrom tidyr pivot_longer pivot_wider
-#' @importFrom tidyselect starts_with all_of
-#' @importFrom stats quantile qt sd
+#' @return Object of class \code{dynforestpdp} with elements \code{ice}, \code{pdp}, \code{model_type}, \code{var_type}, \code{grid}.
 #' @export
-
 compute_ice_pdp <- function(
     timeData = NULL,
     fixedData = NULL,
@@ -70,7 +35,6 @@ compute_ice_pdp <- function(
     ncores = 1,
     conf_level = 0.95
 ) {
-
 
   # Auto-detect idVar / timeVar if missing
   if (is.null(idVar)) {
@@ -103,21 +67,34 @@ compute_ice_pdp <- function(
     long_raw[[timeVar]] <- model$data$Longitudinal$time
     value_cols <- setdiff(colnames(long_raw), c(idVar, timeVar))
     timeData <- long_raw %>%
-      tidyr::pivot_longer(cols = tidyselect::all_of(value_cols), names_to = "Variable", values_to = "Value") %>%
+      tidyr::pivot_longer(cols = tidyselect::all_of(value_cols),
+                          names_to = "Variable", values_to = "Value") %>%
       dplyr::select(dplyr::all_of(c(idVar, timeVar, "Variable", "Value"))) %>%
       tidyr::pivot_wider(names_from = "Variable", values_from = "Value")
   }
 
   # Reconstruct fixedData if missing
   if (is.null(fixedData)) {
-    factor_part <- if (!is.null(model$data$Factor$X)) dplyr::mutate(model$data$Factor$X, !!idVar := model$data$Factor$id) else NULL
-    numeric_part <- if (!is.null(model$data$Numeric$X)) dplyr::mutate(model$data$Numeric$X, !!idVar := model$data$Numeric$id) else NULL
-    if (!is.null(factor_part) && !is.null(numeric_part)) fixedData <- dplyr::full_join(factor_part, numeric_part, by = idVar)
-    else if (!is.null(factor_part)) fixedData <- factor_part
-    else if (!is.null(numeric_part)) fixedData <- numeric_part
+    factor_part <- NULL
+    numeric_part <- NULL
+    if (!is.null(model$data$Factor$X)) {
+      factor_part <- model$data$Factor$X
+      factor_part[[idVar]] <- model$data$Factor$id
+    }
+    if (!is.null(model$data$Numeric$X)) {
+      numeric_part <- model$data$Numeric$X
+      numeric_part[[idVar]] <- model$data$Numeric$id
+    }
+    if (!is.null(factor_part) && !is.null(numeric_part)) {
+      fixedData <- dplyr::full_join(factor_part, numeric_part, by = idVar)
+    } else if (!is.null(factor_part)) {
+      fixedData <- factor_part
+    } else if (!is.null(numeric_part)) {
+      fixedData <- numeric_part
+    }
   }
 
-  # Build grid of values for variable
+  # Build grid of values
   if (!is.null(values)) grid_type_used <- "manual"
   else {
     grid_type <- match.arg(grid_type)
@@ -144,10 +121,12 @@ compute_ice_pdp <- function(
       if (is.null(func)) stop("For longitudinal variables, provide a function.")
       timeData_mod <- timeData_rep
       timeData_mod[[var_name]] <- unlist(lapply(split(timeData_mod[[var_name]], timeData_mod[[idVar]]), func))
-      pred_dyn <- predict(model, fixedData = fixedData_rep, timeData = timeData_mod, idVar = idVar, timeVar = timeVar, t0 = t0)
+      pred_dyn <- predict(model, fixedData = fixedData_rep, timeData = timeData_mod,
+                          idVar = idVar, timeVar = timeVar, t0 = t0)
     } else {
       fixedData_rep[[var_name]] <- value_i
-      pred_dyn <- predict(model, fixedData = fixedData_rep, timeData = timeData_rep, idVar = idVar, timeVar = timeVar, t0 = t0)
+      pred_dyn <- predict(model, fixedData = fixedData_rep, timeData = timeData_rep,
+                          idVar = idVar, timeVar = timeVar, t0 = t0)
     }
 
     # Format predictions
@@ -157,7 +136,8 @@ compute_ice_pdp <- function(
       df$replicate_id <- i
       if (var_type != "longitudinal") df[[var_name]] <- value_i
       if (var_type == "longitudinal") df$transformation <- func_label
-      df_long <- df %>% tidyr::pivot_longer(cols = tidyselect::starts_with("V"), names_to = "time", values_to = "ice_value")
+      df_long <- df %>% tidyr::pivot_longer(cols = tidyselect::starts_with("V"),
+                                            names_to = "time", values_to = "ice_value")
       df_long$time <- as.numeric(rep(pred_dyn$times, length.out = nrow(df_long)))
     } else if (model_type == "numeric") {
       df_long <- data.frame(
@@ -199,11 +179,10 @@ compute_ice_pdp <- function(
         if (var_type == "longitudinal") df_long$transformation <- func_label
       }
     }
-
     return(df_long)
   }
 
-  # Parallel computation or sequential
+  # Parallel or sequential computation
   all_preds <- list()
   if (var_type == "longitudinal") {
     if (is.null(values)) stop("Provide a named list of functions for longitudinal variables.")
@@ -215,18 +194,22 @@ compute_ice_pdp <- function(
   } else {
     if (.Platform$OS.type == "windows" && ncores > 1) {
       cl <- parallel::makeCluster(ncores)
-      parallel::clusterExport(cl, varlist = c("model","fixedData","timeData","var_name","t0","idVar","timeVar","values","target_class","compute_single"), envir = environment())
-      parallel::clusterEvalQ(cl, { library(DynForest); library(dplyr); library(tidyr) })
-      all_preds <- parallel::parLapply(cl, seq_along(values), function(i) compute_single(i, value_i = values[i]))
+      parallel::clusterExport(cl, varlist = c("model","fixedData","timeData","var_name",
+                                              "t0","idVar","timeVar","values","target_class","compute_single"),
+                              envir = environment())
+      all_preds <- parallel::parLapply(cl, seq_along(values),
+                                       function(i) compute_single(i, value_i = values[i]))
       parallel::stopCluster(cl)
     } else if (ncores > 1) {
-      all_preds <- parallel::mclapply(seq_along(values), function(i) compute_single(i, value_i = values[i]), mc.cores = ncores)
+      all_preds <- parallel::mclapply(seq_along(values),
+                                      function(i) compute_single(i, value_i = values[i]),
+                                      mc.cores = ncores)
     } else {
       all_preds <- lapply(seq_along(values), function(i) compute_single(i, value_i = values[i]))
     }
   }
 
-  # Combine all predictions
+  # Combine predictions
   df_long_all <- dplyr::bind_rows(all_preds)
 
   # Compute PDP
@@ -239,7 +222,7 @@ compute_ice_pdp <- function(
     dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) %>%
     dplyr::summarise(
       pdp_value = mean(ice_value, na.rm = TRUE),
-      pdp_sd = sd(ice_value, na.rm = TRUE),
+      pdp_sd = stats::sd(ice_value, na.rm = TRUE),
       n = dplyr::n(),
       .groups = "drop"
     ) %>%
@@ -263,7 +246,6 @@ compute_ice_pdp <- function(
       grid_size = length(values)
     )
   )
-
   class(result) <- "dynforestpdp"
   return(result)
 }

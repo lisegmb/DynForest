@@ -23,7 +23,6 @@ Imports:
     cli, 
     cmprsk, 
     doParallel, 
-    doRNG, 
     foreach, 
     ggplot2, 
     lcmm, 
@@ -38,8 +37,7 @@ Imports:
     tidyr, 
     magrittr,
     viridis,
-    tidyselect,
-    rlang
+    tidyselect
 Depends: R (>= 4.4.0)
 License: LGPL (>= 3)
 LazyData: true
@@ -50,5 +48,6 @@ URL: https://github.com/anthonydevaux/DynForest
 BugReports: https://github.com/anthonydevaux/DynForest/issues
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown,
+    png
 VignetteBuilder: knitr

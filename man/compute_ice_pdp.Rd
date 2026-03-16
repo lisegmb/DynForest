@@ -21,67 +21,37 @@ compute_ice_pdp(
 )
 }
 \arguments{
-\item{timeData}{Optional \code{data.frame} with the subject ID, time variable, and time-dependent predictors.
-If \code{NULL}, the function attempts to reconstruct it from \code{model$data$Longitudinal}.}
+\item{timeData}{Optional data.frame with subject ID, time variable, and longitudinal predictors.}
 
-\item{fixedData}{Optional \code{data.frame} with the subject ID and time-fixed predictors (numeric or factor).
-If \code{NULL}, it is reconstructed from \code{model$data$Factor} and \code{model$data$Numeric}.}
+\item{fixedData}{Optional data.frame with subject ID and fixed predictors.}
 
-\item{model}{A fitted \code{dynforest} object (result of \code{dynforest()}).}
+\item{model}{A fitted \code{dynforest} object.}
 
-\item{var_name}{Character. Name of the predictor variable for which ICE/PDP are computed.}
+\item{var_name}{Name of the predictor variable for ICE/PDP.}
 
-\item{values}{For numeric predictors: a numeric vector of values to evaluate.
-For categorical predictors: a vector of factor levels (defaults to all observed levels).
-For longitudinal predictors: a \strong{named list of functions} to summarize each subject's trajectory (required).}
+\item{values}{Numeric vector, factor levels, or named list of functions for longitudinal.}
 
-\item{timeVar}{Optional character. Name of the time variable. Defaults to \code{model$timeVar} or \code{"time"}.}
+\item{timeVar}{Time variable (defaults to model$timeVar or "time").}
 
-\item{idVar}{Optional character. Name of the subject identifier variable. Auto-detected if \code{NULL}.}
+\item{idVar}{Subject ID variable (auto-detected if NULL).}
 
-\item{t0}{Optional numeric. Landmark time for dynamic prediction; if \code{NULL}, predictions use all available information from time 0.}
+\item{t0}{Landmark time for dynamic prediction.}
 
-\item{target_class}{Optional vector of classes to retain (used for classification models only).}
+\item{target_class}{Classes to retain for classification.}
 
-\item{grid_type}{Character. Type of grid for numeric variables (\code{"regular"}, \code{"observed"}, or \code{"quantile"}).}
+\item{grid_type}{Grid type for numeric predictors: "regular", "observed", "quantile".}
 
-\item{grid_size}{Integer. Number of points in the grid if \code{values} is not provided.}
+\item{grid_size}{Number of points in grid.}
 
-\item{ncores}{Integer. Number of cores to use for parallel computation. Defaults to 1.}
+\item{ncores}{Number of cores for parallel computation.}
 
-\item{conf_level}{Numeric between 0 and 1. Confidence level for PDP intervals. Defaults to 0.95.}
+\item{conf_level}{Confidence level for PDP intervals.}
 }
 \value{
-An object of class \code{dynforestpdp}, which is a list containing:
-\describe{
-\item{\code{ice}}{A \code{data.frame} of individual conditional expectation (ICE) values with columns such as
-\code{id}, \code{replicate_id}, \code{time}, \code{ice_value}, \code{transformation} (for longitudinal predictors),
-\code{var_name} (for fixed predictors), and \code{target_class} (for classification models).}
-\item{\code{pdp}}{A \code{data.frame} of partial dependence plot (PDP) values with columns
-\code{pdp_value}, \code{pdp_sd}, \code{lower}, \code{upper}, and optionally \code{time},
-\code{target_class}, or \code{transformation}.}
-\item{\code{model_type}}{Type of the model: \code{"numeric"}, \code{"factor"}, or \code{"surv"}.}
-\item{\code{var_type}}{Type of the predictor variable: \code{"numeric"}, \code{"factor"}, or \code{"longitudinal"}.}
-\item{\code{grid}}{A list containing \code{grid_type} and \code{grid_size} used for ICE/PDP computation.}
-}
+Object of class \code{dynforestpdp} with elements \code{ice}, \code{pdp}, \code{model_type}, \code{var_type}, \code{grid}.
 }
 \description{
 Compute Individual Conditional Expectation (ICE) and Partial Dependence Plot (PDP)
 values for a specified predictor from a fitted \code{dynforest} model.
-The function supports numeric, categorical, and longitudinal predictors. It can
-reconstruct \code{timeData} and \code{fixedData} from the model object if they are not provided,
-and attempts to auto-detect \code{idVar} and \code{timeVar} when not specified.
-}
-\details{
-The function automatically handles three model types:
-\itemize{
-\item \strong{surv} - longitudinal survival predictions (requires \code{id}, \code{time}, \code{ice_value}).
-\item \strong{factor} - classification with \code{target_class}.
-\item \strong{numeric} - regression.
-}
-For longitudinal predictors, \code{values} must be a named list of summary/transformation functions
-(e.g., \code{list(mean = mean, slope = function(x) coef(lm(x ~ time))[2])}).
-}
-\seealso{
-\code{\link{dynforest}}, \code{\link{plot.dynforestpdp}} for plotting ICE/PDP curves.
+Supports numeric, categorical, and longitudinal predictors.
 }
